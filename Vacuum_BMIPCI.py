@@ -17,13 +17,13 @@ class BMIPCI:
         SQL = SQLConnect('sql')
 
         if self.action == 'Map':
-            '''data = self.DF.loc[self.DF['Gs_SrvType'] == 'LL']
+            #data = self.DF.loc[self.DF['Gs_SrvType'] == 'LL']
+
             placeholders = ', '.join(['%s'] * len(data))
             columns = ', '.join(data.keys())
-            sqlstr = 'create table #tmpTBL ({})'.format(columns)
-            self.Errors = SQL.query("")
-            '''
-            print(self.DF.loc[self.DF['Gs_SrvType'] == 'LL'])
+            sqlstr = 'create table #tmpTBL ({0})'.format(columns)
+            self.Errors = SQL.query(sqlstr)
+
+            #print(self.DF.loc[self.DF['Gs_SrvType'] == 'LL'])
 
         SQL.close()
-
