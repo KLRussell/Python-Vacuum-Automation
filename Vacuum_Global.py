@@ -93,7 +93,7 @@ class SQLConnect:
         try:
             if self.conn_type == 'sql':
                 data = self.engine.execute(query)
-                return pd.DataFrame(data.fetchall(), columns=data._metadata.keys)
+                return pd.DataFrame(data.fetchall(), columns=data._metadata.keys) #, dtypes=data.dtypes
 
             else:
                 self.cursor.execute(query)
