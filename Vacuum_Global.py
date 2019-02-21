@@ -1,4 +1,5 @@
 from urllib.parse import quote_plus
+from sqlalchemy.orm import sessionmaker
 
 import sqlalchemy as sql
 import pandas as pd
@@ -44,21 +45,23 @@ class XMLParseClass:
             parsed = [self.ParseElement(item) for item in self.root.findall(findpath)]
             return pd.DataFrame(parsed)
 
+#Settings['HadoopDSN']
 class SQLConnect:
-    def __init__(self,conn_type):
+    session = False
+
+    def __init__(self,conn_type,dsn=None):
         self.conn_type = conn_type
 
-        if conn_type == 'sql':
-            self.connstring = self.sql_server(
+        if conn_type == 'alch':
+            self.connstring = self.AlchConnStr(
                 '{SQL Server Native Client 11.0}', 1433, Settings['Server'], Settings['Database'], 'mssql'
                 )
-            self.engine = sql.create_engine(self.connstring)
-        else:
-            self.connstring = self.hadoop(Settings['HadoopDSN'])
-            self.conn = pyodbc.connect(self.connstring)
-            self.cursor = self.conn.cursor()
+        elif conn_type == 'sql':
+            self.connstring = self.SQLConnStr(Settings['Server'], Settings['Database'])
+        elif conn_type == 'dsn':
+            self.connstring = self.DSNConnStr(dsn)
 
-    def sql_server(self, driver, port, server, database, flavor='mssql'):
+    def AlchConnStr(self, driver, port, server, database, flavor='mssql'):
         def params(driver, port, server, database):
             return quote_plus (
                 'DRIVER={};PORT={};SERVER={};DATABASE={};Trusted_Connection=yes;'
@@ -68,49 +71,80 @@ class SQLConnect:
         p = params(driver, port, server, database)
         return '{}+pyodbc:///?odbc_connect={}'.format(flavor, p)
 
-    def hadoop(self, DSN):
+    def SQLConnStr(self, server, database):
+        return 'driver={0};server={1};database={2};autocommit=True;Trusted_Connection=yes'.format('{SQL Server}', server, database)
+
+    def DSNConnStr(self, DSN):
         return 'DSN={};DATABASE=default;Trusted_Connection=Yes;'.format(DSN)
 
+    def connect(self):
+        if self.conn_type == 'alch':
+            self.engine = sql.create_engine(self.connstring)
+        else:
+            self.conn = pyodbc.connect(self.connstring)
+            self.cursor = self.conn.cursor()
+            self.conn.commit()
+
     def close(self):
-        if self.conn_type == 'sql':
+        if self.conn_type == 'alch':
             self.engine.dispose()
         else:
             self.cursor.close()
             self.conn.close()
 
-    def upload(self, dataframe, sqltable):
-        if self.conn_type == 'sql':
-            dataframe.to_sql(
-                sqltable.split(".")[1], self.engine,
-                schema=sqltable.split(".")[0],
-                if_exists='append',
-                index=True,
-                index_label='linenumber',
-                chunksize=1000
-            )
+    def createsession(self):
+        if self.conn_type == 'alch':
+            self.engine = sessionmaker(bind=self.engine)
+            self.engine = self.engine()
+            self.engine._model_changes = {}
+            self.session = True
 
     def createtable(self, dataframe, sqltable):
-        if self.conn_type == 'sql':
+        if self.conn_type == 'alch' and not self.session:
             dataframe.to_sql(
                 sqltable,
                 self.engine,
                 if_exists='replace',
-                flavor='mysql',
-                index=False
             )
+
+    def upload(self, dataframe, sqltable):
+        if self.conn_type == 'alch' and not self.session:
+            mytbl = sqltable.split(".")
+
+            if len(mytbl) > 1:
+                dataframe.to_sql(
+                    mytbl[1],
+                    self.engine,
+                    schema=mytbl[0],
+                    if_exists='append',
+                    index=True,
+                    index_label='linenumber',
+                    chunksize=1000
+                )
+            else:
+                dataframe.to_sql(
+                    mytbl[0],
+                    self.engine,
+                    if_exists='replace',
+                    chunksize=1000
+                )
 
     def query(self, query):
         try:
-            if self.conn_type == 'sql':
-                data = self.engine.execute(query)
-                dtypes = [col.type for col in data.context.compiled.statement.columns]
-                return pd.DataFrame(data.fetchall(), columns=data._metadata.keys, dtypes=dtypes)
+            if self.conn_type == 'alch':
+                obj = self.engine.execute(query)
+                print(obj.rowcount)
+                if obj.rowcount > 0:
+                    data = obj.fetchall()
+                    columns = obj._metadata.keys
+                    #dtypes = [col.type for col in data.context.compiled.statement.columns]
+                    #print(dtypes)
+
+                    return pd.DataFrame(data, columns=columns)
 
             else:
-                self.cursor.execute(query)
-                columns = [column[0] for column in self.cursor.description]
-                dtypes = [dtype[1] for dtype in self.cursor.description]
-                return pd.DataFrame(self.cursor.fetchall(), columns=columns, dtypes=dtypes)
+                df = pd.io.sql.read_sql(query, self.conn)
+                return df
 
         except AssertionError as a:
             print('\t[-] {} : SQL Query failed.'.format(a))
@@ -118,11 +152,11 @@ class SQLConnect:
 
     def execute(self, query):
         try:
-            if self.conn_type == 'sql':
+            if self.conn_type == 'alch':
                 self.engine.execute(query)
-
             else:
                 self.cursor.execute(query)
+
 
         except AssertionError as a:
             print('\t[-] {} : SQL Execute failed.'.format(a))
