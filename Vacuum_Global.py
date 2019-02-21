@@ -89,16 +89,28 @@ class SQLConnect:
                 chunksize=1000
             )
 
+    def createtable(self, dataframe, sqltable):
+        if self.conn_type == 'sql':
+            dataframe.to_sql(
+                sqltable,
+                self.engine,
+                if_exists='replace',
+                flavor='mysql',
+                index=False
+            )
+
     def query(self, query):
         try:
             if self.conn_type == 'sql':
                 data = self.engine.execute(query)
-                return pd.DataFrame(data.fetchall(), columns=data._metadata.keys) #, dtypes=data.dtypes
+                dtypes = [col.type for col in data.context.compiled.statement.columns]
+                return pd.DataFrame(data.fetchall(), columns=data._metadata.keys, dtypes=dtypes)
 
             else:
                 self.cursor.execute(query)
                 columns = [column[0] for column in self.cursor.description]
-                return pd.DataFrame(self.cursor.fetchall(), columns=columns)
+                dtypes = [dtype[1] for dtype in self.cursor.description]
+                return pd.DataFrame(self.cursor.fetchall(), columns=columns, dtypes=dtypes)
 
         except AssertionError as a:
             print('\t[-] {} : SQL Query failed.'.format(a))
