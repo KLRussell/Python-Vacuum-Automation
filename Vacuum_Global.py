@@ -126,6 +126,7 @@ class SQLConnect:
                     mytbl[0],
                     self.engine,
                     if_exists='replace',
+                    index=False,
                     chunksize=1000
                 )
 
@@ -164,6 +165,7 @@ class SQLConnect:
 
 def init():
     global Settings
+    global Errors
 
 def Load_Settings():
     Settings = dict()
@@ -198,5 +200,10 @@ def Load_Settings():
     else:
         raise ValueError("Unable to load Vacuum_Settings.xml. Please check path and file {0}".format(Settings['SourceCodeDir']))
 
+def Append_Errors(DF):
+    if not DF.empty:
+        Errors.append(DF)
+
+Errors = []
 Settings = dict()
 Settings = Load_Settings()
