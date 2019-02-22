@@ -275,16 +275,7 @@ class BMIPCI:
         ASQL.upload(self.DF, 'mytbl')
 
         DF_Results = SQL.query('''
-            select
-                A.*
-            from mytbl As A
-            left join {0} As B
-            on
-                A.Macnum = B.Macnum
-
-            where
-                B.MACNUM is null'''.format(Settings['Cust_File'])
-        )
+        ''')
 
         DF_Results['Error_Columns'] = 'Macnum'
         DF_Results['Error_Message'] = 'This Macnum does not exist in CS'
