@@ -1,6 +1,7 @@
 from Vacuum_Global import Settings
 from Vacuum_Global import SQLConnect
 from Vacuum_Global import Append_Errors
+from Vacuum_Global import Get_Errors
 
 import pandas as pd
 
@@ -49,17 +50,19 @@ class BMIPCI:
 
         Append_Errors(DF_Results)
 
-        if data.empty:
-            self.Success = False
-        elif DF_Results.empty:
-            self.Success = True
-        elif not len(data.index) == len(DF_Results.index):
-            self.Success = True
+        if not self.Success:
+            if data.empty:
+                self.Success = False
+            elif DF_Results.empty:
+                self.Success = True
+            elif not len(data.index) == len(DF_Results.index):
+                self.Success = True
 
     def CheckDispute(self, Source_TBL):
         data = self.DF.loc[self.DF['Source_TBL'] == Source_TBL]
 
-        if data:
+        if not data.empty:
+
             ASQL = SQLConnect('alch')
             SQL = SQLConnect('sql')
             SQL.connect()
@@ -67,22 +70,37 @@ class BMIPCI:
 
             ASQL.upload(data, 'mytbl')
 
-            SQL.execute('''
+            if not 'Start_Date' in data.columns:
+                ASQL.execute("alter table mytbl add Start_Date date")
+
+            ASQL.execute('''
                 update A
-                set A.Start_Date = dateadd(day, (-1 * B.Dispute_Limit) + 15, getdate())
+                set A.Start_Date = dateadd(day, (-1 * D.Dispute_Limit) + 15, getdate())
                 from mytbl As A
-                inner join {0} As B
+                left join {0} As B
                 on
-                    A.BAN = B.BAN
+                    A.Source_TBL = 'BMI'
+                        and
+                    A.Source_ID = B.BMI_ID
+                left join {1} As C
+                on
+                    A.Source_TBL = 'PCI'
+                        and
+                    A.Source_ID = C.ID
+                left join {2} As D
+                on
+                    isnull(B.BAN,C.BAN) = D.BAN
 
                 where
                     A.Start_Date is null
-            '''.format(Settings['Limitations']))
+                '''.format(Settings['BMI'],Settings['PCI'],Settings['Limitations'])
+            )
 
-            SQL.execute('''
+            ASQL.execute('''
                 update A
                 set A.Start_Date = eomonth(dateadd(month, -1, A.Start_Date))
                 from mytbl As A
+
                 where
                     A.Start_Date is not null
             ''')
@@ -174,12 +192,13 @@ class BMIPCI:
 
             Append_Errors(DF_Results)
 
-        if data.empty:
-            self.Success = False
-        elif DF_Results.empty:
-            self.Success = True
-        elif not len(data.index) == len(DF_Results.index):
-            self.Success = True
+        if not self.Success:
+            if data.empty:
+                self.Success = False
+            elif DF_Results.empty:
+                self.Success = True
+            elif not len(data.index) == len(DF_Results.index):
+                self.Success = True
 
     def CheckProv(self):
         ASQL = SQLConnect('alch')
@@ -188,8 +207,6 @@ class BMIPCI:
         ASQL.connect()
 
         ASQL.upload(self.DF, 'mytbl')
-
-        ASQL.execute("drop table mytbl")
 
         DF_Results = SQL.query('''
             select
@@ -221,15 +238,18 @@ class BMIPCI:
                 )'''.format(Settings['Cust_File'], Settings['Send_To_Prov'])
         )
 
+        ASQL.execute("drop table mytbl")
+
         SQL.close()
         ASQL.close()
 
         Append_Errors(DF_Results)
 
-        if DF_Results.empty:
-            self.Success = True
-        elif not len(self.DF.index) == len(DF_Results.index):
-            self.Success = True
+        if not self.Success:
+            if DF_Results.empty:
+                self.Success = True
+            elif not len(self.DF.index) == len(DF_Results.index):
+                self.Success = True
 
     def CheckLV(self):
         ASQL = SQLConnect('alch')
@@ -241,18 +261,31 @@ class BMIPCI:
 
         DF_Results = SQL.query('''
             select
-                A.*
+                A.*,
+                iif(B.MACNUM is null,'Macnum','Source_TBL, Source_ID') As Error_Columns,
+                iif(B.MACNUM is null,'This Macnum does not exist in CS','This Source_TBL and Source_ID is already pending in Send to LV table') As Error_Message
+
             from mytbl As A
             left join {0} As B
             on
                 A.Macnum = B.Macnum
+            left join {1} As C
+            on
+                A.Source_TBL = C.Source_TBL
+                    and
+                A.Source_ID = C.Source_ID
+                    and
+                (
+                    C.Is_Rejected is null
+                        or
+                    C.Sugg_Action is null
+                )
 
             where
-                B.MACNUM is null'''.format(Settings['Cust_File'])
+                B.MACNUM is null
+                    or
+                C.STL_ID is not null'''.format(Settings['Cust_File'], Settings['Send_To_LV'])
         )
-
-        DF_Results['Error_Columns'] = 'Macnum'
-        DF_Results['Error_Message'] = 'This Macnum does not exist in CS'
 
         ASQL.execute("drop table mytbl")
 
@@ -261,10 +294,11 @@ class BMIPCI:
 
         Append_Errors(DF_Results)
 
-        if DF_Results.empty:
-            self.Success = True
-        elif not len(self.DF.index) == len(DF_Results.index):
-            self.Success = True
+        if not self.Success:
+            if DF_Results.empty:
+                self.Success = True
+            elif not len(self.DF.index) == len(DF_Results.index):
+                self.Success = True
 
     def CheckDN(self):
         ASQL = SQLConnect('alch')
@@ -275,10 +309,30 @@ class BMIPCI:
         ASQL.upload(self.DF, 'mytbl')
 
         DF_Results = SQL.query('''
-        ''')
+            select
+                A.*
 
-        DF_Results['Error_Columns'] = 'Macnum'
-        DF_Results['Error_Message'] = 'This Macnum does not exist in CS'
+            from mytbl As A
+            left join {0} As B
+            on
+                B.Open_Dispute = 1
+                    and
+                B.Norm_Dispute_Category = 'GRT CNR'
+            left join {1} As C
+            on
+                B.DSB_ID = C.DSB_ID
+                    and
+                A.Source_TBL = C.Source_TBL
+                    and
+                A.Source_ID = C.Source_ID
+
+            where
+                B.DF_ID is null
+        '''.format(Settings['Dispute_Fact'],Settings['Dispute_Staging_Bridge'])
+        )
+
+        DF_Results['Error_Columns'] = 'Source_TBL, Source_ID'
+        DF_Results['Error_Message'] = 'There are no open GRT CNR disputes for this Source_TBL & Source_ID combo'
 
         ASQL.execute("drop table mytbl")
 
@@ -287,10 +341,162 @@ class BMIPCI:
 
         Append_Errors(DF_Results)
 
-        if DF_Results.empty:
-            self.Success = True
-        elif not len(self.DF.index) == len(DF_Results.index):
-            self.Success = True
+        if not self.Success:
+            if DF_Results.empty:
+                self.Success = True
+            elif not len(self.DF.index) == len(DF_Results.index):
+                self.Success = True
+
+    def CheckED(self):
+        ASQL = SQLConnect('alch')
+        SQL = SQLConnect('sql')
+        SQL.connect()
+        ASQL.connect()
+
+        ASQL.upload(self.DF, 'mytbl')
+
+        DF_Results = SQL.query('''
+            select
+                A.*
+
+            from mytbl As A
+            left join {0} As B
+            on
+                B.Open_Dispute = 1
+                    and
+                B.Norm_Dispute_Category = 'GRT CNR'
+            left join {1} As C
+            on
+                B.DSB_ID = C.DSB_ID
+                    and
+                A.Source_TBL = C.Source_TBL
+                    and
+                A.Source_ID = C.Source_ID
+            left join {2} As D
+            on
+                B.DH_ID = D.DH_ID
+                    and
+                D.Display_Status = 'Denied - Pending'
+
+            where
+                D.DH_ID is null
+        '''.format(Settings['Dispute_Fact'],Settings['Dispute_Staging_Bridge'], Settings['Dispute_History'])
+        )
+
+        DF_Results['Error_Columns'] = 'Source_TBL, Source_ID'
+        DF_Results['Error_Message'] = 'There are no open Denied - Pending GRT CNR disputes for this Source_TBL & Source_ID combo'
+
+        ASQL.execute("drop table mytbl")
+
+        SQL.close()
+        ASQL.close()
+
+        Append_Errors(DF_Results)
+
+        if not self.Success:
+            if DF_Results.empty:
+                self.Success = True
+            elif not len(self.DF.index) == len(DF_Results.index):
+                self.Success = True
+
+    def CheckPD(self):
+        ASQL = SQLConnect('alch')
+        SQL = SQLConnect('sql')
+        SQL.connect()
+        ASQL.connect()
+
+        ASQL.upload(self.DF, 'mytbl')
+
+        DF_Results = SQL.query('''
+            select
+                A.*,
+                case
+                    when D.DH_ID is null then 'Source_TBL, Source_ID'
+                    when isnumeric(A.amount) != 1 then 'Amount'
+                    when A.amount <= 0 then 'Amount'
+                    when isdate(A.Credit_Invoice_Date) != 1 then 'Credit_Invoice_Date'
+                    when A.Credit_Invoice_Date != eomonth(A.Credit_Invoice_Date) then 'Credit_Invoice_Date'
+                    when A.Credit_Invoice_Date < getdate() then 'Credit_Invoice_Date'
+                end As Error_Columns,
+                case
+                    when D.DH_ID is null then 'There are no open Denied - Pending or Approved GRT CNR disputes for this Source_ID'
+                    when isnumeric(A.amount) != 1 then 'Amount is not numeric'
+                    when A.amount <= 0 then 'Amount is <= 0'
+                    when isdate(A.Credit_Invoice_Date) != 1 then 'Credit_Invoice_Date is not a date'
+                    when A.Credit_Invoice_Date != eomonth(A.Credit_Invoice_Date) then 'Credit_Invoice_Date is not the end of the month'
+                    when A.Credit_Invoice_Date < getdate() then 'Credit_Invoice_Date is in the past'
+                end As Error_Message
+
+            from mytbl As A
+            left join {0} As B
+            on
+                B.Open_Dispute = 1
+                    and
+                B.Norm_Dispute_Category = 'GRT CNR'
+            left join {1} As C
+            on
+                B.DSB_ID = C.DSB_ID
+                    and
+                A.Source_TBL = C.Source_TBL
+                    and
+                A.Source_ID = C.Source_ID
+            left join {2} As D
+            on
+                B.DH_ID = D.DH_ID
+                    and
+                D.Display_Status in ('Denied - Pending', 'Approved', 'Partial Approved')
+
+            where
+                D.DH_ID is null
+                    or
+                isnumeric(A.amount) != 1
+                    or
+                A.amount <= 0
+                    or
+                isdate(A.Credit_Invoice_Date) != 1
+                    or
+                A.Credit_Invoice_Date != eomonth(A.Credit_Invoice_Date)
+                    or
+                A.Credit_Invoice_Date < getdate()
+        '''.format(Settings['Dispute_Fact'],Settings['Dispute_Staging_Bridge'],Settings['Dispute_History'])
+        )
+
+        ASQL.execute("drop table mytbl")
+
+        SQL.close()
+        ASQL.close()
+
+        Append_Errors(DF_Results)
+
+        if not self.Success:
+            if DF_Results.empty:
+                self.Success = True
+            elif not len(self.DF.index) == len(DF_Results.index):
+                self.Success = True
+
+    def Map(self, Source_TBL):
+        Errs = Get_Errors()
+        #DF = self.DF.loc[self.DF['Source_TBL'] == Source_TBL]
+        data = pd.merge(self.DF, Errs, how='left', on=['Source_TBL', 'Source_ID']).loc[(self.DF['Source_TBL'] == Source_TBL) & (Errs['Error_Columns'].empty), self.DF.columns]
+        print(data)
+        '''
+        if not data.empty:
+            ASQL = SQLConnect('alch')
+            SQL = SQLConnect('sql')
+            SQL.connect()
+            ASQL.connect()
+
+            if not 'Comment' in data.columns:
+                data['Comment'] = None
+
+            ASQL.upload(data, 'mytbl')
+
+            ASQL.execute("drop table mytbl")
+
+            SQL.close()
+            ASQL.close()
+        '''
+
 
     def Validate(self):
         self.Success = False
@@ -304,12 +510,21 @@ class BMIPCI:
         elif self.action == 'Dispute':
             self.CheckDispute('BMI')
             self.CheckDispute('PCI')
-        elif self.action == 'Sent to Prov':
+        elif self.action == 'Send to Prov':
             self.CheckProv()
-        elif self.action == 'Sent to LV':
+        elif self.action == 'Send to LV':
             self.CheckLV()
-        elif self.action == 'Dispute Note':
+        elif self.action == 'Dispute Note' or self.action == 'Close Disputes':
             self.CheckDN()
+        elif self.action == 'Escalate Disputes':
+            self.CheckED()
+        elif self.action == 'Paid Disputes':
+            self.CheckPD()
 
         if self.Success:
             return True
+
+    def Process(self):
+        if self.action == 'Map':
+            self.Map('PCI')
+            self.Map('BMI')
