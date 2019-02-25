@@ -204,6 +204,10 @@ def Append_Errors(DF):
     if not DF.empty:
         Errors.append(DF)
 
+def Get_Errors():
+    if Errors:
+        return pd.concat(Errors, ignore_index=True, sort=False).drop_duplicates().reset_index(drop=True)
+
 Errors = []
 Settings = dict()
 Settings = Load_Settings()
