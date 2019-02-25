@@ -3,6 +3,7 @@ from datetime import datetime
 from Vacuum_Global import XMLParseClass
 from Vacuum_Global import Errors
 from Vacuum_Global import Settings
+from Vacuum_Global import Get_Errors
 from Vacuum_BMIPCI import BMIPCI
 from Vacuum_DisputeActions import DisputeActions
 from Vacuum_NewUser import NewUser
@@ -13,8 +14,8 @@ import pandas as pd
 import os
 
 def Process_Errors():
-    DF = pd.concat(Errors, ignore_index=True).drop_duplicates().reset_index(drop=True)
-    print(DF)
+    DF = Get_Errors()
+    #print(DF)
 
 def Check_For_Updates():
     for DirPath in Settings['UpdatesDir']:
@@ -42,10 +43,8 @@ def Process_Updates(Files):
                         if not DF.empty:
                             MyObj = BMIPCI(action, DF, upload_date)
 
-                            MyObj.Validate()
-                                #print("Success")
-                            #else:
-                                #print("Process Errors")
+                            if MyObj.Validate():
+                                MyObj.Process()
 
                 elif folder_name == '02_Seeds':
                     for Cost_Type in Settings['Seed-Cost_Type'].split(', '):
