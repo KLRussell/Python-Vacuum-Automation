@@ -11,11 +11,14 @@ from Vacuum_NonSeeds import NonSeeds
 from Vacuum_Seeds import Seeds
 import pathlib as pl
 import pandas as pd
-import os
+import os, gc
+
+gc.collect()
 
 def Process_Errors():
     DF = Get_Errors()
     #print(DF)
+    del DF
 
 def Check_For_Updates():
     for DirPath in Settings['UpdatesDir']:
@@ -42,9 +45,7 @@ def Process_Updates(Files):
 
                         if not DF.empty:
                             MyObj = BMIPCI(action, DF, upload_date)
-
-                            if MyObj.Validate():
-                                MyObj.Process()
+                            MyObj.Process()
 
                 elif folder_name == '02_Seeds':
                     for Cost_Type in Settings['Seed-Cost_Type'].split(', '):
@@ -56,6 +57,9 @@ def Process_Updates(Files):
                 elif folder_name == '04_Dispute-Actions':
                     for action in Settings['Dispute_Actions-Action']:
                         DisputeActions(action, Parsed.loc[Parsed['Action'] == action], folder_name, upload_date)
+                del Parsed
+            del XMLObj
+        del upload_date, folder_name
 
 if __name__ == '__main__':
     Has_Updates = None
@@ -66,3 +70,5 @@ if __name__ == '__main__':
 
     Process_Updates(Has_Updates)
     Process_Errors()
+
+    os.system('pause')
