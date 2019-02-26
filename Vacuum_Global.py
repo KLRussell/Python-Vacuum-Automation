@@ -133,10 +133,11 @@ class SQLConnect:
     def query(self, query):
         try:
             if self.conn_type == 'alch':
-                obj = self.engine.execute(query)
-                print(obj.rowcount)
-                if obj.rowcount > 0:
+                obj = self.engine.execute(sql.text(query))
+
+                if obj._saved_cursor.arraysize > 0:
                     data = obj.fetchall()
+
                     columns = obj._metadata.keys
                     #dtypes = [col.type for col in data.context.compiled.statement.columns]
                     #print(dtypes)
