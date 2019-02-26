@@ -8,55 +8,174 @@ import pandas as pd
 #self.DF.loc[self.DF['Gs_SrvType'] == 'LL',['Source_TBL','Source_ID','Gs_SrvID']]
 
 class BMIPCI:
-    Success = False
-
     def __init__(self, action, DF, upload_date):
         self.action = action
         self.DF = DF
         self.upload_date = upload_date
 
-    def CheckMapped(self, Gs_SrvType, Col):
+    def Update_Map(self, ASQL, Source_TBL, BMB_TBL, BMM_TBL, Unmapped_TBL):
+            param = None
+
+            if Source_TBL == 'BMI':
+                param = ", C.frameID=B.initials"
+
+            ASQL.execute('''
+                insert into {1}
+                (
+                    gs_srvID,
+                    gs_srvType,
+                    {0}_ID,
+                    Rep
+                )
+                select
+                    A.gs_srvID,
+                    A.gs_srvType,
+                    A.Source_ID,
+                    B.initials
+
+                from mytbl2 As A
+                inner join {2} As B
+                on
+                    A.Comp_Serial = B.Comp_Serial
+
+                where
+                    A.BMB = 1
+                        and
+                    A.Error_Columns is null
+                '''.format(Source_TBL, BMB_TBL, Settings['CAT_Emp'])
+            )
+
+            ASQL.execute('''
+                update C
+                    set
+                        C.gs_SrvID=iif(A.BMB=1,A.Source_ID,A.gs_SrvID),
+                        C.gs_SrvType=iif(A.BMB=1,'BMB',A.gs_SrvType),
+                        C.Edit_Date=getdate()
+                        {3}
+
+                from mytbl2 As A
+                inner join {2} As B
+                on
+                    A.Comp_Serial = B.Comp_Serial
+                inner join {1} As C
+                on
+                    A.Source_ID = C.{0}_ID
+
+                where
+                    A.Error_Columns is null
+                '''.format(Source_TBL, BMM_TBL, Settings['CAT_Emp'], param)
+            )
+
+            ASQL.execute('''
+                insert into {1}
+                (
+                    {0}_ID,
+                    Audit_Result,
+                    Rep,
+                    Comment,
+                    Edit_Date
+                )
+                select
+                    A.Source_ID,
+                    'Mapped',
+                    B.initials,
+                    A.action_comment,
+                    getdate()
+
+                from mytbl2 As A
+                inner join {2} As B
+                on
+                    A.Comp_Serial = B.Comp_Serial
+
+                where
+                    A.Error_Columns is null
+            '''.format(Source_TBL, Unmapped_TBL, Settings['CAT_Emp'])
+            )
+
+    def Map(self, Gs_SrvType, Col, Source_TBL):
         DF_Results = pd.DataFrame()
-        data = self.DF.loc[self.DF['Gs_SrvType'] == Gs_SrvType]
+        data = self.DF.loc[(self.DF['Gs_SrvType'] == Gs_SrvType) & (self.DF['Source_TBL'] == Source_TBL)]
 
         if not data.empty:
-            SQL = SQLConnect('sql')
             ASQL = SQLConnect('alch')
-            SQL.connect()
             ASQL.connect()
+
+            if not 'action_comment' in data.columns:
+                data['Action_Comment'] = None
+
+            data['Error_Columns'] = None
+            data['Error_Message'] = None
 
             ASQL.upload(data, 'mytbl')
 
-            DF_Results = SQL.query('''
-                select
-                    A.*
+            if ASQL.query("select object_id('mytbl2')").iloc[0, 0]:
+                ASQL.execute("drop table mytbl2")
 
-                from mytbl As A
+            ASQL.upload(ASQL.query('''
+                with
+                    MYTMP
+                As
+                (
+                    select
+                        {0},
+                        iif(charindex(',',Gs_SrvID)>0,1,0) As BMB,
+                        cast
+                        (
+                            '<head><page><![CDATA['
+                                +
+                            replace(Gs_SrvID, ',', ']]></page><page><![CDATA[')
+                                +
+                            ']]></page></head>' as XML
+                        ) As tempVar
+
+                    from mytbl
+                ),
+                    MYTMP2
+                As
+                (
+                    select
+                        {0},
+                        BMB,
+                        MY_Tbl.My_Col.value('.','VARCHAR(max)') Gs_SrvID
+
+                    from MYTMP tempVar
+                        cross apply tempvar.nodes('/head/page') MY_Tbl(My_Col)
+                )
+
+                select
+                    *
+                from MYTMP2'''.format(",".join(data.loc[:,data.columns != 'Gs_SrvID'].columns.values))
+            ), 'mytbl2')
+
+            ASQL.execute("drop table mytbl;")
+
+            ASQL.execute('''
+                update A
+                    set
+                        A.Error_Columns = 'Gs_SrvType, Gs_SrvID',
+                        A.Error_Message = 'Gs_SrvID in {2} is not found in {0}'
+
+                from mytbl2 As A
                 left join {0} As B
                 on
                     A.Gs_SrvID = B.{1}
 
                 where
-                    B.{1} is null'''.format(Settings[Gs_SrvType],Col)
+                    B.{1} is null'''.format(Settings[Gs_SrvType],Col,Gs_SrvType)
             )
 
-            DF_Results['Error_Columns'] = 'Gs_SrvType, Gs_SrvID'
-            DF_Results['Error_Message'] = 'Gs_SrvID in {0} is not found in {1}'.format(Gs_SrvType,Settings[Gs_SrvType])
+            if Source_TBL == 'BMI':
+                self.Update_Map(ASQL, Source_TBL, Settings['BMB'], Settings['BMM'], Settings['Unmapped'])
+            else:
+                self.Update_Map(ASQL, Source_TBL, Settings['PCI_BMB'], Settings['PCI'], Settings['PCI_Unmapped'])
 
-            ASQL.execute("drop table mytbl")
+            ASQL.execute("drop table mytbl2")
 
-            SQL.close()
             ASQL.close()
 
-        Append_Errors(DF_Results)
+            Append_Errors(DF_Results)
 
-        if not self.Success:
-            if data.empty:
-                self.Success = False
-            elif DF_Results.empty:
-                self.Success = True
-            elif not len(data.index) == len(DF_Results.index):
-                self.Success = True
+        del data, DF_Results
 
     def CheckDispute(self, Source_TBL):
         data = self.DF.loc[self.DF['Source_TBL'] == Source_TBL]
@@ -64,8 +183,6 @@ class BMIPCI:
         if not data.empty:
 
             ASQL = SQLConnect('alch')
-            SQL = SQLConnect('sql')
-            SQL.connect()
             ASQL.connect()
 
             ASQL.upload(data, 'mytbl')
@@ -192,13 +309,7 @@ class BMIPCI:
 
             Append_Errors(DF_Results)
 
-        if not self.Success:
-            if data.empty:
-                self.Success = False
-            elif DF_Results.empty:
-                self.Success = True
-            elif not len(data.index) == len(DF_Results.index):
-                self.Success = True
+        del data, DF_Results
 
     def CheckProv(self):
         ASQL = SQLConnect('alch')
@@ -245,11 +356,7 @@ class BMIPCI:
 
         Append_Errors(DF_Results)
 
-        if not self.Success:
-            if DF_Results.empty:
-                self.Success = True
-            elif not len(self.DF.index) == len(DF_Results.index):
-                self.Success = True
+        del DF_Results
 
     def CheckLV(self):
         ASQL = SQLConnect('alch')
@@ -294,11 +401,7 @@ class BMIPCI:
 
         Append_Errors(DF_Results)
 
-        if not self.Success:
-            if DF_Results.empty:
-                self.Success = True
-            elif not len(self.DF.index) == len(DF_Results.index):
-                self.Success = True
+        del DF_Results
 
     def CheckDN(self):
         ASQL = SQLConnect('alch')
@@ -341,11 +444,7 @@ class BMIPCI:
 
         Append_Errors(DF_Results)
 
-        if not self.Success:
-            if DF_Results.empty:
-                self.Success = True
-            elif not len(self.DF.index) == len(DF_Results.index):
-                self.Success = True
+        del DF_Results
 
     def CheckED(self):
         ASQL = SQLConnect('alch')
@@ -393,11 +492,7 @@ class BMIPCI:
 
         Append_Errors(DF_Results)
 
-        if not self.Success:
-            if DF_Results.empty:
-                self.Success = True
-            elif not len(self.DF.index) == len(DF_Results.index):
-                self.Success = True
+        del DF_Results
 
     def CheckPD(self):
         ASQL = SQLConnect('alch')
@@ -468,45 +563,22 @@ class BMIPCI:
 
         Append_Errors(DF_Results)
 
-        if not self.Success:
-            if DF_Results.empty:
-                self.Success = True
-            elif not len(self.DF.index) == len(DF_Results.index):
-                self.Success = True
+        del DF_Results
 
-    def Map(self, Source_TBL):
-        Errs = Get_Errors()
-        #DF = self.DF.loc[self.DF['Source_TBL'] == Source_TBL]
-        data = pd.merge(self.DF, Errs, how='left', on=['Source_TBL', 'Source_ID']).loc[(self.DF['Source_TBL'] == Source_TBL) & (Errs['Error_Columns'].empty), self.DF.columns]
-        print(data)
-        '''
-        if not data.empty:
-            ASQL = SQLConnect('alch')
-            SQL = SQLConnect('sql')
-            SQL.connect()
-            ASQL.connect()
-
-            if not 'Comment' in data.columns:
-                data['Comment'] = None
-
-            ASQL.upload(data, 'mytbl')
-
-            ASQL.execute("drop table mytbl")
-
-            SQL.close()
-            ASQL.close()
-        '''
-
-
-    def Validate(self):
+    def Process(self):
         self.Success = False
 
         if self.action == 'Map':
-            self.CheckMapped('LL', 'ORD_WTN')
-            self.CheckMapped('BRD', 'ORD_BRD_ID')
-            self.CheckMapped('DED', 'CUS_DED_ID')
-            self.CheckMapped('LD', 'ORD_WTN')
-            self.CheckMapped('TF', 'ORD_POTS_ANI_BIL')
+            self.Map('LL', 'ORD_WTN','BMI')
+            self.Map('LL', 'ORD_WTN', 'PCI')
+            self.Map('BRD', 'ORD_BRD_ID','BMI')
+            self.Map('BRD', 'ORD_BRD_ID', 'PCI')
+            self.Map('DED', 'CUS_DED_ID','BMI')
+            self.Map('DED', 'CUS_DED_ID', 'PCI')
+            self.Map('LD', 'ORD_WTN','BMI')
+            self.Map('LD', 'ORD_WTN', 'PCI')
+            self.Map('TF', 'ORD_POTS_ANI_BIL','BMI')
+            self.Map('TF', 'ORD_POTS_ANI_BIL', 'PCI')
         elif self.action == 'Dispute':
             self.CheckDispute('BMI')
             self.CheckDispute('PCI')
@@ -520,11 +592,3 @@ class BMIPCI:
             self.CheckED()
         elif self.action == 'Paid Disputes':
             self.CheckPD()
-
-        if self.Success:
-            return True
-
-    def Process(self):
-        if self.action == 'Map':
-            self.Map('PCI')
-            self.Map('BMI')
