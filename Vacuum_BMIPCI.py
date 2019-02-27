@@ -566,45 +566,47 @@ class BMIPCI:
 
     def CheckProv(self):
         ASQL = SQLConnect('alch')
-        SQL = SQLConnect('sql')
-        SQL.connect()
         ASQL.connect()
 
         ASQL.upload(self.DF, 'mytbl')
 
-        DF_Results = SQL.query('''
-            select
-                A.*,
-                iif(B.MACNUM is null,'Macnum','Source_TBL, Source_ID') As Error_Columns,
-                iif(B.MACNUM is null,'This Macnum does not exist in CS','This Source_TBL and Source_ID is already pending in Send to Prov table') As Error_Message
-
+        ASQL.execute('''
+            update A
+                set
+                    A.Error_Columns = 'Macnum',
+                    A.Error_Message = 'This Macnum does not exist in CS'
             from mytbl As A
             left join {0} As B
             on
                 A.Macnum = B.Macnum
-            left join {1} As C
-            on
-                A.Source_TBL = C.Source_TBL
-                    and
-                A.Source_ID = C.Source_ID
 
             where
-                B.MACNUM is null
-                    or
-                (
-                    C.Root_Cause is null
-                        and
-                    C.Prov_Note is null
-                        and
-                    C.New_Root_Cause is null
-                        and
-                    C.Audit_ID is not null
-                )'''.format(Settings['Cust_File'], Settings['Send_To_Prov'])
+                B.MACNUM is null'''.format(Settings['Cust_File']
+        )
+
+        ASQL.execute('''
+            update A
+                set
+                    A.Error_Columns = 'Source_TBL, Source_ID',
+                    A.Error_Message = 'This Source_TBL and Source_ID is already pending in Send to Prov table'
+
+            from mytbl As A
+            inner join {0} As B
+            on
+                A.Source_TBL = B.Source_TBL
+                    and
+                A.Source_ID = B.Source_ID
+
+            where
+                B.Root_Cause is null
+                    and
+                B.Prov_Note is null
+                    and
+                B.New_Root_Cause is null'''.format(Settings['Send_To_Prov'])
         )
 
         ASQL.execute("drop table mytbl")
 
-        SQL.close()
         ASQL.close()
 
         Append_Errors(DF_Results)
