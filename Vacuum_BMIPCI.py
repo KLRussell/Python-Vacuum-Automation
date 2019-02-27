@@ -3,7 +3,7 @@ from Vacuum_Global import SQLConnect
 from Vacuum_Global import Append_Errors
 from Vacuum_Global import Get_Errors
 
-import pandas as pd
+import pandas as pd, datetime
 
 #self.DF.loc[self.DF['Gs_SrvType'] == 'LL',['Source_TBL','Source_ID','Gs_SrvID']]
 
@@ -177,134 +177,387 @@ class BMIPCI:
 
         del data, DF_Results
 
-    def CheckDispute(self, Source_TBL):
-        data = self.DF.loc[self.DF['Source_TBL'] == Source_TBL]
+    def GetBatch(self, AsDate=False):
+        current_time = datetime.datetime.now()
+        last_friday = (current_time.date()
+            - datetime.timedelta(days=current_time.weekday())
+            + datetime.timedelta(days=4, weeks=-1))
+        if AsDate:
+            return last_friday
+        else:
+            return last_friday.__format__("%Y%m%d")
+
+    def Dispute_Seeds(self, ASQL, data, Source, TBL, Seed, on, where, Cost_Type, Record_Type, inner=""):
+
+        Cols = "A." + ", A.".join(data.loc[:,~data.columns.isin(['Action', 'Start_Date'])].columns.values)
+        Cols2 = ",".join(data.loc[:,~data.columns.isin(['Action', 'Start_Date'])].columns.values)
+
+        myquery = '''
+            select
+                {3} As Seed,
+                '{5}' As Cost_Type,
+                {6} As Record_Type,
+                {4}
+
+            from mytbl As A
+            {7}
+            inner join {0} As B
+            on
+                {1}
+                    and
+                {2}'''.format(TBL, on, where, Seed, Cols, Cost_Type, Record_Type, inner)
+
+        if not ASQL.query("select object_id('mytbl2')").iloc[0, 0]:
+            myresults = ASQL.query(myquery)
+
+            if not myresults.empty:
+                ASQL.upload(myresults, 'mytbl2')
+        else:
+            ASQL.execute('''
+                insert into mytbl2
+                (
+                    Seed,
+                    Cost_Type,
+                    Record_Type,
+                    {0}
+                )
+            '''.format(Cols2) + myquery)
+
+    def Dispute(self, Source, Source_Col):
+        DF_Results = pd.DataFrame()
+        data = self.DF.loc[self.DF['Source_TBL'] == Source]
 
         if not data.empty:
+            print("Processing disputes for {}".format(Source))
+
+            if not 'Start_Date' in data.columns:
+                data['Start_Date'] = None
+                select = 'Seed'
+                data['Start_Date'] = data['Start_Date'].astype('datetime64[D]')
+
+            if not 'USI' in data.columns:
+                data['USI'] = None
+
+            if not 'PON' in data.columns:
+                data['PON'] = None
+
+            if not 'Action_Comment' in data.columns:
+                data['Action_Comment'] = None
 
             ASQL = SQLConnect('alch')
             ASQL.connect()
 
             ASQL.upload(data, 'mytbl')
 
-            if not 'Start_Date' in data.columns:
-                ASQL.execute("alter table mytbl add Start_Date date")
+            ASQL.execute('''
+                update A
+                    set A.Claim_Channel = 'Email'
+
+                from mytbl As A
+
+                where
+                    A.Source_TBL = 'PCI'
+                    ''')
 
             ASQL.execute('''
                 update A
-                set A.Start_Date = dateadd(day, (-1 * D.Dispute_Limit) + 15, getdate())
+                    set A.Start_Date = dateadd(day, (-1 * C.Dispute_Limit) + 15, getdate())
                 from mytbl As A
-                left join {0} As B
+                inner join {1} As B
                 on
-                    A.Source_TBL = 'BMI'
-                        and
-                    A.Source_ID = B.BMI_ID
-                left join {1} As C
+                    A.Source_ID = B.{0}
+                inner join {2} As C
                 on
-                    A.Source_TBL = 'PCI'
-                        and
-                    A.Source_ID = C.ID
-                left join {2} As D
-                on
-                    isnull(B.BAN,C.BAN) = D.BAN
+                    B.BAN = C.BAN
 
                 where
                     A.Start_Date is null
-                '''.format(Settings['BMI'],Settings['PCI'],Settings['Limitations'])
+                '''.format(Source_Col,Settings[Source],Settings['Limitations'])
             )
 
             ASQL.execute('''
                 update A
-                set A.Start_Date = eomonth(dateadd(month, -1, A.Start_Date))
+                    set A.Start_Date = eomonth(dateadd(month, -1, A.Start_Date))
                 from mytbl As A
 
                 where
-                    A.Start_Date is not null
-            ''')
+                    A.Start_Date is not null'''
+            )
 
-            if Source_TBL == 'BMI':
-                DF_Results = SQL.query('''
+            if ASQL.query("select object_id('mytbl2')").iloc[0, 0]:
+                ASQL.execute("drop table mytbl2")
+
+            if Source == 'BMI':
+                print("Grabbing MRC Cost")
+
+                self.Dispute_Seeds(
+                    ASQL,
+                    data,
+                    Source,
+                    Settings['MRC'],
+                    'BDT_MRC_ID',
+                    'B.Invoice_Date > A.Start_Date and A.Source_ID = B.BMI_ID',
+                    'Amount > 0',
+                    'MRC',
+                    "'MRC'"
+                )
+
+                print("Grabbing OCC Cost")
+
+                self.Dispute_Seeds(
+                    ASQL,
+                    data,
+                    Source,
+                    Settings['OCC'],
+                    'BDT_OCC_ID',
+                    'B.Invoice_Date > A.Start_Date and B.Vendor = C.Vendor and B.BAN = C.BAN and B.BTN = C.WTN and B.Circuit_ID = C.Circuit_ID',
+                    'Amount > 0',
+                    'OCC',
+                    "upper(Activity_Type)",
+                    "inner join {0} As C on A.Source_ID = C.BMI_ID".format(Settings['BMI'])
+                )
+            else:
+                print("Grabbing PaperCost MRC Cost")
+
+                self.Dispute_Seeds(
+                    ASQL,
+                    data,
+                    Source,
+                    Settings['PaperCost'],
+                    'Seed',
+                    'B.Bill_Date > A.Start_Date and A.Source_ID = B.PCI_ID',
+                    'MRC > 0',
+                    'PC-MRC',
+                    "'MRC'"
+                )
+
+                print("Grabbing PaperCost NRC Cost")
+
+                self.Dispute_Seeds(
+                    ASQL,
+                    data,
+                    Source,
+                    Settings['PaperCost'],
+                    'Seed',
+                    'B.Bill_Date > A.Start_Date and A.Source_ID = B.PCI_ID',
+                    'NRC > 0',
+                    'PC-NRC',
+                    "'NRC'"
+                )
+
+                print("Grabbing PaperCost FRAC Cost")
+
+                self.Dispute_Seeds(
+                    ASQL,
+                    data,
+                    Source,
+                    Settings['PaperCost'],
+                    'Seed',
+                    'B.Bill_Date > A.Start_Date and A.Source_ID = B.PCI_ID',
+                    'FRAC > 0',
+                    'PC-FRAC',
+                    "'FRAC'"
+                )
+
+            if ASQL.query("select object_id('mytbl2')").iloc[0, 0]:
+                if ASQL.query("select object_id('DS')").iloc[0, 0]:
+                    ASQL.execute("DROP TABLE DS")
+
+                if ASQL.query("select object_id('DSB')").iloc[0, 0]:
+                    ASQL.execute("DROP TABLE DSB")
+
+                if ASQL.query("select object_id('DH')").iloc[0, 0]:
+                    ASQL.execute("DROP TABLE DH")
+
+                ASQL.execute("CREATE TABLE DSB (DSB_ID int, Stc_Claim_Number varchar(255))")
+                ASQL.execute("CREATE TABLE DS (DS_ID int, DSB_ID int)")
+                ASQL.execute("CREATE TABLE DH (DH_ID int, DSB_ID int)")
+
+                print("Disputing {} cost".format(Source))
+
+                ASQL.execute('''
+                    insert into {0}
+                    (
+                        USI,
+                        STC_Claim_Number,
+                        Source_TBL,
+                        Source_ID
+                    )
+
+                    OUTPUT
+                        INSERTED.DSB_ID,
+                        INSERTED.Stc_Claim_Number
+
+                    INTO DSB
+
+                    select
+                        USI,
+                        '{1}_' + left(Record_Type,1) + cast(Seed as varchar),
+                        Source_TBL,
+                        Source_ID
+
+                    from mytbl2;'''.format(Settings['Dispute_Staging_Bridge'],self.GetBatch())
+                )
+
+                ASQL.execute('''
+                    insert into {0}
+                    (
+                        DSB_ID,
+                        Rep,
+                        STC_Claim_Number,
+                        Dispute_Type,
+                        Dispute_Category,
+                        Audit_Type,
+                        Cost_Type,
+                        Cost_Type_Seed,
+                        Record_Type,
+                        Dispute_Reason,
+                        PON,
+                        Comment,
+                        Confidence,
+                        Batch_DT
+                    )
+
+                    OUTPUT
+                        INSERTED.DS_ID,
+                        INSERTED.DSB_ID
+
+                    INTO DS
+
+                    select
+                        DSB.DSB_ID,
+                        B.Full_Name,
+                        '{2}_' + left(A.Record_Type,1) + cast(A.Seed as varchar),
+                        A.Claim_Channel,
+                        'GRT CNR',
+                        'CNR Audit',
+                        A.Cost_Type,
+                        A.Seed,
+                        A.Record_Type,
+                        A.Action_Reason,
+                        A.PON,
+                        A.Action_Comment,
+                        A.Confidence,
+                        '{3}'
+
+                    from mytbl2 As A
+                    inner join {1} As B
+                    on
+                        A.Comp_Serial = B.Comp_Serial
+                    inner join DSB
+                    on
+                        DSB.Stc_Claim_Number='{2}_' + left(A.Record_Type,1) + cast(A.Seed as varchar)
+                '''.format(Settings['DisputeStaging'], Settings['CAT_Emp'], self.GetBatch(), self.GetBatch(True))
+                )
+
+                ASQL.execute('''
+                    insert into {0}
+                    (
+                        DSB_ID,
+                        Dispute_Category,
+                        Display_Status,
+                        Date_Submitted,
+                        Dispute_Reason,
+                        GRT_Update_Rep,
+                        Date_Updated,
+                        Source_File
+                    )
+
+                    OUTPUT
+                        INSERTED.DH_ID,
+                        INSERTED.DSB_ID
+
+                    INTO DH
+
+                    select
+                        DSB.DSB_ID,
+                        'GRT CNR',
+                        'Filed',
+                        getdate(),
+                        A.Action_Reason,
+                        B.Full_Name,
+                        getdate(),
+                        'GRT Email: ' + format(getdate(),'yyyyMMdd')
+
+                    from mytbl2 As A
+                    inner join {1} As B
+                    on
+                        A.Comp_Serial = B.Comp_Serial
+                    inner join DSB
+                    on
+                        DSB.Stc_Claim_Number='{2}_' + left(A.Record_Type,1) + cast(A.Seed as varchar)
+
+                    where
+                        A.Claim_Channel = 'Email'
+                '''.format(Settings['Dispute_History'], Settings['CAT_Emp'], self.GetBatch())
+                )
+
+                ASQL.execute('''
+                    insert into {0}
+                    (
+                        DS_ID,
+                        DSB_ID,
+                        DH_ID,
+                        Open_Dispute
+                    )
+                    select
+                        DS.DS_ID,
+                        DS.DSB_ID,
+                        DH.DH_ID,
+                        1
+
+                    from DSB
+                    inner join DS
+                    on
+                        DSB.DSB_ID = DS.DSB_ID
+                    left join DH
+                    on
+                        DSB.DSB_ID = DH.DSB_ID
+                '''.format(Settings['Dispute_Fact'])
+                )
+
+                DF_Results = ASQL.query('''
                     with
-                        TMP
+                        MY_TMP
                     As
                     (
-                        select
-                            A.*
+                        select distinct
+                            Source_TBL,
+                            Source_ID
 
-                        from mytbl As A
-                        left join {0} As B
-                        on
-                            A.Source_ID = B.BMI_ID
-                                and
-                            B.Invoice_Date > A.Start_Date
-                                and
-                            B.Amount > 0
-
-                        where
-                            B.BDT_MRC_ID is null
-                    ),
-                        TMP2
-                    As
-                    (
-                        select
-                            A.BMI_ID,
-                            B.BDT_MRC_ID,
-                            B.Invoice_Date
-
-                        from {1} As A
-                        inner join {2} As B
-                        on
-                            A.Vendor = B.Vendor
-                                and
-                            A.BAN = B.BAN
-                                and
-                            A.WTN = B.BTN
-                                and
-                            A.Circuit_ID = B.Circuit_ID
-
-                        where
-                            B.Amount > 0
+                        from mytbl2
                     )
 
                     select
                         A.*
-                    from TMP As A
-                    left join TMP2 As B
-                    on
-                        A.Source_ID = B.BMI_ID
-                            and
-                        A.Start_Date < B.Invoice_Date
 
-                    where
-                        B.BDT_OCC_ID is null'''.format(Settings['MRC'],Settings['BMI'],Settings['OCC'])
-                )
-
-                DF_Results['Error_Columns'] = 'Source_TBL, Source_ID'
-                DF_Results['Error_Message'] = 'Valid cost for Source_ID of {0} is not found in MRC or OCC tables'.format(Source_TBL)
-
-            elif Source_TBL == 'PCI':
-                DF_Results = SQL.query('''
-                    select
-                        A.*
                     from mytbl As A
-                    left join {0} As B
+                    left join MY_TMP As B
                     on
-                        A.Source_ID = B.PCI_ID
+                        A.Source_TBL = B.Source_TBL
                             and
-                        B.Bill_Date > A.Start_Date
-                            and
-                        (B.MRC > 0 or B.FRAC > 0 or B.NRC > 0)
+                        A.Source_ID = B.Source_ID
 
                     where
-                        B.Seed is null'''.format(Settings['PaperCost'])
+                        B.Source_TBL is null
+                '''
                 )
 
-                DF_Results['Error_Columns'] = 'Source_TBL, Source_ID'
-                DF_Results['Error_Message'] = 'Valid cost for Source_ID of {0} is not found in Papercost'.format(Source_TBL)
+                if not DF_Results.empty:
+                    DF_Results['Error_Columns'] = 'Source_TBL, Source_ID, Start_Date'
+                    DF_Results['Error_Message'] = 'Valid cost was not found for the Source_TBL, Source_ID, Start_Date combo'
 
-            ASQL.execute("drop table mytbl")
+                ASQL.execute("drop table mytbl, mytbl2, DS, DSB, DH")
+            else:
+                print("Warning! No cost found for {} of spreadsheet".format(Source))
 
-            SQL.close()
+                DF_Results = ASQL.query('select * from mytbl')
+
+                DF_Results['Error_Columns'] = 'Source_TBL, Source_ID, Start_Date'
+                DF_Results['Error_Message'] = 'Valid cost was not found for the Source_TBL, Source_ID, Start_Date combo'
+
+                ASQL.execute("drop table mytbl")
+
             ASQL.close()
 
             Append_Errors(DF_Results)
@@ -566,7 +819,6 @@ class BMIPCI:
         del DF_Results
 
     def Process(self):
-        self.Success = False
 
         if self.action == 'Map':
             self.Map('LL', 'ORD_WTN','BMI')
@@ -580,8 +832,8 @@ class BMIPCI:
             self.Map('TF', 'ORD_POTS_ANI_BIL','BMI')
             self.Map('TF', 'ORD_POTS_ANI_BIL', 'PCI')
         elif self.action == 'Dispute':
-            self.CheckDispute('BMI')
-            self.CheckDispute('PCI')
+            self.Dispute('BMI', 'BMI_ID')
+            self.Dispute('PCI', 'ID')
         elif self.action == 'Send to Prov':
             self.CheckProv()
         elif self.action == 'Send to LV':
