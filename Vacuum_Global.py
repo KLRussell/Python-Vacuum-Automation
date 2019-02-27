@@ -148,7 +148,7 @@ class SQLConnect:
                 df = pd.io.sql.read_sql(query, self.conn)
                 return df
 
-        except AssertionError as a:
+        except ValueError as a:
             print('\t[-] {} : SQL Query failed.'.format(a))
             pass
 
@@ -160,7 +160,7 @@ class SQLConnect:
                 self.cursor.execute(query)
 
 
-        except AssertionError as a:
+        except ValueError as a:
             print('\t[-] {} : SQL Execute failed.'.format(a))
             pass
 
