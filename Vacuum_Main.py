@@ -17,7 +17,7 @@ gc.collect()
 
 def Process_Errors():
     DF = Get_Errors()
-    #print(DF)
+    print(DF)
     del DF
 
 def Check_For_Updates():
@@ -30,6 +30,8 @@ def Process_Updates(Files):
     for File in Files:
         upload_date = datetime.now()
         folder_name = os.path.basename(os.path.dirname(File))
+
+        print("Processing {0}/{1}".format(folder_name,os.path.basename(File)))
 
         if folder_name == '05_New_User':
             NewUser(File, upload_date)
