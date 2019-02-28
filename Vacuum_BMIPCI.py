@@ -153,7 +153,7 @@ class BMIPCI:
                 update A
                     set
                         A.Error_Columns = 'Gs_SrvType, Gs_SrvID',
-                        A.Error_Message = 'Gs_SrvID in {2} is not found in {0}'
+                        A.Error_Message = Gs_SrvType + ' ' + cast(Gs_SrvID as varchar) + ' is not found in {0}'
 
                 from mytbl2 As A
                 left join {0} As B
@@ -161,7 +161,43 @@ class BMIPCI:
                     A.Gs_SrvID = B.{1}
 
                 where
-                    B.{1} is null'''.format(Settings[Gs_SrvType],Col,Gs_SrvType)
+                    B.{1} is null'''.format(Settings[Gs_SrvType],Col)
+            )
+
+            ASQL.execute('''
+                update A
+                    A.Error_Columns = 'Gs_SrvType, Gs_SrvID',
+                    A.Error_Message = 'BMB table is already mapped to ' + Gs_SrvType + ' ' + cast(Gs_SrvID as varchar)
+
+                from mytbl2 As A
+                inner join {0} As B
+                on
+                    A.Source_ID = B.BMI_ID
+                        and
+                    A.Gs_SrvType = B.Gs_SrvType
+                        and
+                    A.Gs_SrvID = B.Gs_SrvID
+
+                where
+                    A.BMB = 1'''.format(Settings['BMB'])
+            )
+
+            ASQL.execute('''
+                update A
+                    A.Error_Columns = 'Gs_SrvType, Gs_SrvID',
+                    A.Error_Message = 'BMB table is already mapped to ' + Gs_SrvType + ' ' + cast(Gs_SrvID as varchar)
+
+                from mytbl2 As A
+                inner join {0} As B
+                on
+                    A.Source_ID = B.PCI_ID
+                        and
+                    A.Gs_SrvType = B.Gs_SrvType
+                        and
+                    A.Gs_SrvID = B.Gs_SrvID
+
+                where
+                    A.BMB = 1'''.format(Settings['PCI_BMB'])
             )
 
             if Source_TBL == 'BMI':
@@ -288,7 +324,7 @@ class BMIPCI:
                 ASQL.execute("drop table mytbl2")
 
             if Source == 'BMI':
-                print("Grabbing MRC Cost")
+                print("Grabbing MRC & OCC Cost")
 
                 self.Dispute_Seeds(
                     ASQL,
@@ -301,8 +337,6 @@ class BMIPCI:
                     'MRC',
                     "'MRC'"
                 )
-
-                print("Grabbing OCC Cost")
 
                 self.Dispute_Seeds(
                     ASQL,
@@ -317,7 +351,7 @@ class BMIPCI:
                     "inner join {0} As C on A.Source_ID = C.BMI_ID".format(Settings['BMI'])
                 )
             else:
-                print("Grabbing PaperCost MRC Cost")
+                print("Grabbing PaperCost MRC, NRC, and FRAC Cost")
 
                 self.Dispute_Seeds(
                     ASQL,
@@ -331,8 +365,6 @@ class BMIPCI:
                     "'MRC'"
                 )
 
-                print("Grabbing PaperCost NRC Cost")
-
                 self.Dispute_Seeds(
                     ASQL,
                     data,
@@ -344,8 +376,6 @@ class BMIPCI:
                     'PC-NRC',
                     "'NRC'"
                 )
-
-                print("Grabbing PaperCost FRAC Cost")
 
                 self.Dispute_Seeds(
                     ASQL,
@@ -516,6 +546,100 @@ class BMIPCI:
                 '''.format(Settings['Dispute_Fact'])
                 )
 
+                ASQL.execute('''
+                    with
+                        MY_TMP
+                    As
+                    (
+                        select distinct
+                            Source_ID,
+                            Action_Comment
+
+                        from mytbl2
+
+                        where
+                            Source_TBL = 'BMI'
+                    )
+
+                    INSERT INTO {0}
+                    (
+                        BMI_ID,
+                        Invoice_Date,
+                        Tag,
+                        Audit_Result,
+                        Rep,
+                        Comment,
+                        Edit_Date
+                    )
+                    select
+                        A.Source_ID,
+                        B.Invoice_Date,
+                        B.Tag,
+                        'Dispute Review',
+                        C.Initials,
+                        A.Action_Comment,
+                        getdate()
+
+                    from MY_TMP As A
+                    inner join {1} As B
+                    on
+                        A.Source_ID = B.Source_ID
+                    inner join {2} As C
+                    on
+                        A.Comp_Serial = C.Comp_Serial
+
+                    where
+                        B.Source_TBL = 'BMI'
+                '''.format(Settings['ZeroRevenue'], Settings['CNR'], Settings['CAT_Emp'])
+                )
+
+                ASQL.execute('''
+                    with
+                        MY_TMP
+                    As
+                    (
+                        select distinct
+                            Source_ID,
+                            Action_Comment
+
+                        from mytbl2
+
+                        where
+                            Source_TBL = 'PCI'
+                    )
+
+                    INSERT INTO {0}
+                    (
+                        PCI_ID,
+                        Invoice_Date,
+                        Tag,
+                        Audit_Result,
+                        Rep,
+                        Comment,
+                        Edit_Date
+                    )
+                    select
+                        A.Source_ID,
+                        B.Invoice_Date,
+                        B.Tag,
+                        'Dispute Review',
+                        C.Initials,
+                        A.Action_Comment,
+                        getdate()
+
+                    from MY_TMP As A
+                    inner join {1} As B
+                    on
+                        A.Source_ID = B.Source_ID
+                    inner join {2} As C
+                    on
+                        A.Comp_Serial = C.Comp_Serial
+
+                    where
+                        B.Source_TBL = 'PCI'
+                '''.format(Settings['PCI_ZeroRevenue'], Settings['CNR'], Settings['CAT_Emp'])
+                )
+
                 DF_Results = ASQL.query('''
                     with
                         MY_TMP
@@ -581,7 +705,7 @@ class BMIPCI:
                 A.Macnum = B.Macnum
 
             where
-                B.MACNUM is null'''.format(Settings['Cust_File']
+                B.MACNUM is null'''.format(Settings['Cust_File'])
         )
 
         ASQL.execute('''
