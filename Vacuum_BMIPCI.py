@@ -49,7 +49,7 @@ class BMIPCI:
                 update C
                     set
                         C.gs_SrvID=iif(A.BMB=1,A.Source_ID,A.gs_SrvID),
-                        C.gs_SrvType=iif(A.BMB=1,'BMB',A.gs_SrvType),
+                        C.gs_SrvType=iif(A.BMB=1,iif(Source_TBL='PCI','M2M','BMB'),A.gs_SrvType),
                         C.Edit_Date=getdate()
                         {3}
 
@@ -222,6 +222,70 @@ class BMIPCI:
             return last_friday
         else:
             return last_friday.__format__("%Y%m%d")
+
+    def UpdateZeroRev(self, ASQL, Source, Audit_Result, Comment, Dispute=False):
+        if Source == 'BMI':
+            ZeroRevTBL = Settings['ZeroRevenue']
+        else:
+            ZeroRevTBL = Settings['PCI_ZeroRevenue']
+
+        if Dispute:
+            ASQL.upload(ASQL.query('''
+                select distinct
+                    Source_ID,
+                    Action_Comment
+
+                from mytbl2
+
+                where
+                    Source_TBL = '{0}'
+            '''.format(Source)
+            ), 'mydata')
+        else:
+            ASQL.upload(ASQL.query('''
+                select
+                    *
+                from mytbl
+
+                where
+                    Source_TBL = '{0}'
+            '''.format(Source)
+            ), 'mydata')
+
+        if ASQL.query("select object_id('mydata')").iloc[0, 0]:
+            ASQL.execute('''
+                INSERT INTO {0}
+                (
+                    {1}_ID,
+                    Invoice_Date,
+                    Tag,
+                    Audit_Result,
+                    Rep,
+                    Comment,
+                    Edit_Date
+                )
+                select
+                    A.Source_ID,
+                    B.Max_CNR_Date,
+                    B.Tag,
+                    '{4}',
+                    C.Initials,
+                    A.{5},
+                    getdate()
+
+                from mydata As A
+                inner join {2} As B
+                on
+                    B.Source_TBL = '{1}'
+                        and
+                    A.Source_ID = B.Source_ID
+                inner join {3} As C
+                on
+                    A.Comp_Serial = C.Comp_Serial
+            '''.format(ZeroRevTBL, Source, Settings['CNR'], Settings['CAT_Emp'], Audit_Result, Comment)
+            )
+
+            ASQL.execute('DROP TABLE mydata')
 
     def Dispute_Seeds(self, ASQL, data, Source, TBL, Seed, on, where, Cost_Type, Record_Type, inner=""):
 
@@ -546,99 +610,8 @@ class BMIPCI:
                 '''.format(Settings['Dispute_Fact'])
                 )
 
-                ASQL.execute('''
-                    with
-                        MY_TMP
-                    As
-                    (
-                        select distinct
-                            Source_ID,
-                            Action_Comment
-
-                        from mytbl2
-
-                        where
-                            Source_TBL = 'BMI'
-                    )
-
-                    INSERT INTO {0}
-                    (
-                        BMI_ID,
-                        Invoice_Date,
-                        Tag,
-                        Audit_Result,
-                        Rep,
-                        Comment,
-                        Edit_Date
-                    )
-                    select
-                        A.Source_ID,
-                        B.Invoice_Date,
-                        B.Tag,
-                        'Dispute Review',
-                        C.Initials,
-                        A.Action_Comment,
-                        getdate()
-
-                    from MY_TMP As A
-                    inner join {1} As B
-                    on
-                        A.Source_ID = B.Source_ID
-                    inner join {2} As C
-                    on
-                        A.Comp_Serial = C.Comp_Serial
-
-                    where
-                        B.Source_TBL = 'BMI'
-                '''.format(Settings['ZeroRevenue'], Settings['CNR'], Settings['CAT_Emp'])
-                )
-
-                ASQL.execute('''
-                    with
-                        MY_TMP
-                    As
-                    (
-                        select distinct
-                            Source_ID,
-                            Action_Comment
-
-                        from mytbl2
-
-                        where
-                            Source_TBL = 'PCI'
-                    )
-
-                    INSERT INTO {0}
-                    (
-                        PCI_ID,
-                        Invoice_Date,
-                        Tag,
-                        Audit_Result,
-                        Rep,
-                        Comment,
-                        Edit_Date
-                    )
-                    select
-                        A.Source_ID,
-                        B.Invoice_Date,
-                        B.Tag,
-                        'Dispute Review',
-                        C.Initials,
-                        A.Action_Comment,
-                        getdate()
-
-                    from MY_TMP As A
-                    inner join {1} As B
-                    on
-                        A.Source_ID = B.Source_ID
-                    inner join {2} As C
-                    on
-                        A.Comp_Serial = C.Comp_Serial
-
-                    where
-                        B.Source_TBL = 'PCI'
-                '''.format(Settings['PCI_ZeroRevenue'], Settings['CNR'], Settings['CAT_Emp'])
-                )
+                self.UpdateZeroRev(ASQL,'BMI','Dispute Review', 'Action_Comment', True)
+                self.UpdateZeroRev(ASQL,'PCI','Dispute Review', 'Action_Comment', True)
 
                 DF_Results = ASQL.query('''
                     with
@@ -692,6 +665,9 @@ class BMIPCI:
         ASQL = SQLConnect('alch')
         ASQL.connect()
 
+        self.DF['Error_Columns'] = None
+        self.DF['Error_Message'] = None
+
         ASQL.upload(self.DF, 'mytbl')
 
         ASQL.execute('''
@@ -729,7 +705,105 @@ class BMIPCI:
                 B.New_Root_Cause is null'''.format(Settings['Send_To_Prov'])
         )
 
-        ASQL.execute("drop table mytbl")
+        ASQL.upload(ASQL.query('''
+            select distinct
+                DATA.*,
+                CNR.Vendor,
+                CNR.BAN,
+                CNR.BTN,
+                CNR.WTN,
+                CNR.Circuit_ID,
+                CNR.MRC_Amount,
+                CNR.Max_CNR_Date,
+                MRC.Product_Type
+
+            from mytbl As DATA
+            inner join {0} As CNR
+            on
+                DATA.Source_TBL = CNR.Source_TBL
+                    and
+                DATA.Source_ID = CNR.Source_ID
+            left join {1} As MRC
+            on
+                DATA.Source_TBL = 'BMI'
+                    and
+                CNR.Max_CNR_Date = MRC.Invoice_Date
+                    and
+                DATA.Source_ID = MRC.BMI_ID
+        '''.format(Settings['CNR'],Settings['MRC'])
+        ), 'mytbl2')
+
+        ASQL.execute('''
+            insert into {0}
+            (
+                Batch,
+                Audit_Name,
+                Audit_Group,
+                CAT_Rep,
+                Source_TBL,
+                Source_ID,
+                Product,
+                Vendor,
+                BAN,
+                BTN,
+                WTN,
+                Circuit_ID,
+                Monthly_Impact,
+                Invoice_Date,
+                Macnum,
+                Associated_PON,
+                Issue,
+                Category,
+                Recommended_Action,
+                Normalized_Reason,
+                Sub_Reason
+            )
+            select
+                eomonth(getdate()),
+                'CNR',
+                A.Audit_Group,
+                B.Initials,
+                A.Source_TBL,
+                A.Source_ID,
+                A.Product_Type,
+                A.Vendor,
+                A.BAN,
+                A.BTN,
+                A.WTN,
+                A.Circuit_ID,
+                A.MRC_Amount,
+                A.Max_CNR_Date,
+                A.Macnum,
+                A.PON,
+                A.Action_Reason,
+                A.Prov_Category,
+                A.Prov_Recommendation,
+                A.Prov_Norm_Reason,
+                A.Prov_Sub_Reason
+
+            from mytbl2 As A
+            inner join {1} As B
+            on
+                A.Comp_Serial = B.Comp_Serial
+            where
+                A.Error_Columns is null
+        '''.format(Settings['Send_To_Prov'],Settings['CAT_Emp'])
+        )
+
+        self.UpdateZeroRev(ASQL,'BMI','Pending Prov', 'Action_Reason')
+        self.UpdateZeroRev(ASQL,'PCI','Pending Prov', 'Action_Reason')
+
+        DF_Results = ASQL.query('''
+            select
+                *
+            from mytbl
+
+            where
+                Error_Columns is not null
+        '''
+        )
+
+        ASQL.execute("drop table mytbl, mytbl2")
 
         ASQL.close()
 
