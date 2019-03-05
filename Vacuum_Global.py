@@ -159,7 +159,7 @@ class SQLConnect:
     def execute(self, query):
         try:
             if self.conn_type == 'alch':
-                self.engine.execute(query)
+                self.engine.execute(mysql.text(query))
             else:
                 self.cursor.execute(query)
 
