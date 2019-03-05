@@ -1,76 +1,80 @@
 from time import sleep
 from datetime import datetime
 from Vacuum_Global import XMLParseClass
-from Vacuum_Global import Errors
-from Vacuum_Global import Settings
-from Vacuum_Global import Get_Errors
+from Vacuum_Global import settings
+from Vacuum_Global import get_errors
 from Vacuum_BMIPCI import BMIPCI
 from Vacuum_DisputeActions import DisputeActions
 from Vacuum_NewUser import NewUser
 from Vacuum_NonSeeds import NonSeeds
 from Vacuum_Seeds import Seeds
 import pathlib as pl
-import pandas as pd
 import os, gc
 
 gc.collect()
 
-def Process_Errors():
-    DF = Get_Errors()
-    print(DF)
-    del DF
 
-def Check_For_Updates():
-    for DirPath in Settings['UpdatesDir']:
-        Files = list(pl.Path(DirPath).glob('*.xml'))
-        if Files:
-            return Files
+def process_errors():
+    df = get_errors()
+    print(df)
+    del df
 
-def Process_Updates(Files):
-    for File in Files:
+
+def check_for_updates():
+    for DirPath in settings['UpdatesDir']:
+        files = list(pl.Path(DirPath).glob('*.xml'))
+        if files:
+            return files
+
+
+def process_updates(files):
+    for file in files:
         upload_date = datetime.now()
-        folder_name = os.path.basename(os.path.dirname(File))
+        folder_name = os.path.basename(os.path.dirname(file))
 
-        print("Processing {0}/{1}".format(folder_name,os.path.basename(File)))
+        print("Processing {0}/{1}".format(folder_name,os.path.basename(file)))
 
         if folder_name == '05_New_User':
-            NewUser(File, upload_date)
+            NewUser(file, upload_date)
         else:
-            XMLObj = XMLParseClass(File)
+            xmlobj = XMLParseClass(file)
 
-            if XMLObj:
-                Parsed = XMLObj.ParseXML('./{urn:schemas-microsoft-com:rowset}data/')
+            if xmlobj:
+                parsed = xmlobj.parsexml('./{urn:schemas-microsoft-com:rowset}data/')
 
                 if folder_name == '01_BMI-PCI':
-                    for action in Settings['BMIPCI-Action']:
-                        DF = Parsed.loc[Parsed['Action'] == action]
+                    for action in settings['BMIPCI-Action']:
+                        df = parsed.loc[parsed['Action'] == action]
 
-                        if not DF.empty:
-                            MyObj = BMIPCI(action, DF, upload_date)
-                            MyObj.Process()
+                        if not df.empty:
+                            xmlobj = BMIPCI(action, df, upload_date)
+                            xmlobj.process()
 
                 elif folder_name == '02_Seeds':
-                    for Cost_Type in Settings['Seed-Cost_Type'].split(', '):
-                        Seeds(Cost_Type, Parsed.loc[Parsed['Cost_Type'] == Cost_Type], folder_name, upload_date)
+                    for Cost_Type in settings['Seed-Cost_Type'].split(', '):
+                        Seeds(Cost_Type, parsed.loc[parsed['Cost_Type'] == Cost_Type], folder_name, upload_date)
 
                 elif folder_name == '03_Non-Seeds':
-                    NonSeeds(Parsed, folder_name, upload_date)
+                    NonSeeds(parsed, folder_name, upload_date)
 
                 elif folder_name == '04_Dispute-Actions':
-                    for action in Settings['Dispute_Actions-Action']:
-                        DisputeActions(action, Parsed.loc[Parsed['Action'] == action], folder_name, upload_date)
-                del Parsed
-            del XMLObj
+                    for action in settings['Dispute_Actions-Action']:
+                        DisputeActions(action, parsed.loc[parsed['Action'] == action], folder_name, upload_date)
+                del parsed
+            del xmlobj
         del upload_date, folder_name
+
 
 if __name__ == '__main__':
     Has_Updates = None
 
-    while (Has_Updates is None):
-        Has_Updates = Check_For_Updates()
+    while Has_Updates is None:
+        Has_Updates = check_for_updates()
         sleep(1)
 
-    Process_Updates(Has_Updates)
-    Process_Errors()
+    process_updates(Has_Updates)
+    process_errors()
 
     os.system('pause')
+
+gc.collect()
