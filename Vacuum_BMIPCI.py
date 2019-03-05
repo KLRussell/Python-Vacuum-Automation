@@ -7,10 +7,9 @@ import pathlib as pl
 
 
 class BMIPCI:
-    def __init__(self, action, df, upload_date):
+    def __init__(self, action, df):
         self.action = action
         self.df = df
-        self.upload_date = upload_date
 
     @staticmethod
     def getbatch(asdate=False, dayofweek=4, weekoffset=-1):
