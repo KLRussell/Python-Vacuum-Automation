@@ -1,21 +1,23 @@
 from urllib.parse import quote_plus
 from sqlalchemy.orm import sessionmaker
+from pandas.io import sql
 
-import sqlalchemy as sql
+import sqlalchemy as mysql
 import pandas as pd
 import xml.etree.ElementTree as ET
 import os, pyodbc
 
+
 class XMLParseClass:
-    def __init__(self, File):
+    def __init__(self, file):
         try:
-            tree = ET.parse(File)
+            tree = ET.parse(file)
             self.root = tree.getroot()
         except AssertionError as a:
             print('\t[-] {} : Parse failed.'.format(a))
             pass
 
-    def ParseElement(self, element, parsed=None):
+    def parseelement(self, element, parsed=None):
         if parsed is None:
             parsed = dict()
 
@@ -30,58 +32,61 @@ class XMLParseClass:
         elif element.text and element.tag not in parsed:
             parsed[element.tag] = element.text
 
-
         for child in list(element):
-            self.ParseElement(child, parsed)
+            self.parseelement(child, parsed)
         return parsed
 
-    def ParseXML(self, findpath, DictVar=False):
-        if isinstance(DictVar, dict):
+    def parsexml(self, findpath, dictvar=None):
+        if isinstance(dictvar, dict):
             for item in self.root.findall(findpath):
-                DictVar = self.ParseElement(item, DictVar)
+                dictvar = self.parseelement(item, dictvar)
 
-            return DictVar
+            return dictvar
         else:
-            parsed = [self.ParseElement(item) for item in self.root.findall(findpath)]
-            DF = pd.DataFrame(parsed)
+            parsed = [self.parseelement(item) for item in self.root.findall(findpath)]
+            df = pd.DataFrame(parsed)
 
-            return DF.applymap(lambda x: x.strip() if isinstance(x, str) else x)
+            return df.applymap(lambda x: x.strip() if isinstance(x, str) else x)
 
-#Settings['HadoopDSN']
+
 class SQLConnect:
     session = False
+    engine = None
+    conn = None
+    cursor = None
 
     def __init__(self,conn_type,dsn=None):
         self.conn_type = conn_type
 
         if conn_type == 'alch':
-            self.connstring = self.AlchConnStr(
-                '{SQL Server Native Client 11.0}', 1433, Settings['Server'], Settings['Database'], 'mssql'
+            self.connstring = self.alchconnstr(
+                '{SQL Server Native Client 11.0}', 1433, settings['Server'], settings['Database'], 'mssql'
                 )
         elif conn_type == 'sql':
-            self.connstring = self.SQLConnStr(Settings['Server'], Settings['Database'])
+            self.connstring = self.sqlconnstr(settings['Server'], settings['Database'])
         elif conn_type == 'dsn':
-            self.connstring = self.DSNConnStr(dsn)
+            self.connstring = self.dsnconnstr(dsn)
 
-    def AlchConnStr(self, driver, port, server, database, flavor='mssql'):
-        def params(driver, port, server, database):
-            return quote_plus (
+    @staticmethod
+    def alchconnstr(driver, port, server, database, flavor='mssql'):
+        p = quote_plus(
                 'DRIVER={};PORT={};SERVER={};DATABASE={};Trusted_Connection=yes;'
-                .format(driver, port, server, database)
-            )
+                .format(driver, port, server, database))
 
-        p = params(driver, port, server, database)
         return '{}+pyodbc:///?odbc_connect={}'.format(flavor, p)
 
-    def SQLConnStr(self, server, database):
-        return 'driver={0};server={1};database={2};autocommit=True;Trusted_Connection=yes'.format('{SQL Server}', server, database)
+    @staticmethod
+    def sqlconnstr(server, database):
+        return 'driver={0};server={1};database={2};autocommit=True;Trusted_Connection=yes'.format('{SQL Server}',
+                                                                                                  server, database)
 
-    def DSNConnStr(self, DSN):
-        return 'DSN={};DATABASE=default;Trusted_Connection=Yes;'.format(DSN)
+    @staticmethod
+    def dsnconnstr(dsn):
+        return 'DSN={};DATABASE=default;Trusted_Connection=Yes;'.format(dsn)
 
     def connect(self):
         if self.conn_type == 'alch':
-            self.engine = sql.create_engine(self.connstring)
+            self.engine = mysql.create_engine(self.connstring)
         else:
             self.conn = pyodbc.connect(self.connstring)
             self.cursor = self.conn.cursor()
@@ -135,19 +140,16 @@ class SQLConnect:
     def query(self, query):
         try:
             if self.conn_type == 'alch':
-                obj = self.engine.execute(sql.text(query))
+                obj = self.engine.execute(mysql.text(query))
 
                 if obj._saved_cursor.arraysize > 0:
                     data = obj.fetchall()
-
                     columns = obj._metadata.keys
-                    #dtypes = [col.type for col in data.context.compiled.statement.columns]
-                    #print(dtypes)
 
                     return pd.DataFrame(data, columns=columns)
 
             else:
-                df = pd.io.sql.read_sql(query, self.conn)
+                df = sql.read_sql(query, self.conn)
                 return df
 
         except ValueError as a:
@@ -161,56 +163,61 @@ class SQLConnect:
             else:
                 self.cursor.execute(query)
 
-
         except ValueError as a:
             print('\t[-] {} : SQL Execute failed.'.format(a))
             pass
 
+
 def init():
-    global Settings
-    global Errors
+    global settings
+    global errors
 
-def Load_Settings():
-    Settings = dict()
 
-    Settings['SourceDir'] = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-    Settings['SourceCodeDir'] = Settings['SourceDir'] + "\\03_Source_Code"
+def load_settings():
+    mysettings = dict()
+    updatesdir = []
 
-    UpdatesDir = []
-    UpdatesDir.append(Settings['SourceDir'] + "\\01_Updates\\01_BMI-PCI")
-    UpdatesDir.append(Settings['SourceDir'] + "\\01_Updates\\02_Seeds")
-    UpdatesDir.append(Settings['SourceDir'] + "\\01_Updates\\03_Non-Seeds")
-    UpdatesDir.append(Settings['SourceDir'] + "\\01_Updates\\04_Dispute-Actions")
-    UpdatesDir.append(Settings['SourceDir'] + "\\01_Updates\\05_New-User")
+    mysettings['SourceDir'] = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+    mysettings['SourceCodeDir'] = mysettings['SourceDir'] + "\\03_Source_Code"
 
-    Settings['UpdatesDir'] = UpdatesDir
+    updatesdir.append(mysettings['SourceDir'] + "\\01_Updates\\01_BMI-PCI")
+    updatesdir.append(mysettings['SourceDir'] + "\\01_Updates\\02_Seeds")
+    updatesdir.append(mysettings['SourceDir'] + "\\01_Updates\\03_Non-Seeds")
+    updatesdir.append(mysettings['SourceDir'] + "\\01_Updates\\04_Dispute-Actions")
+    updatesdir.append(mysettings['SourceDir'] + "\\01_Updates\\05_New-User")
 
-    XMLObj = XMLParseClass(Settings['SourceCodeDir'] + "\\Vacuum_Settings.xml")
+    mysettings['UpdatesDir'] = updatesdir
 
-    if XMLObj:
-        Settings = XMLObj.ParseXML('./Settings/Network/', Settings)
-        Settings = XMLObj.ParseXML('./Settings/Read_Write_TBL/', Settings)
-        Settings = XMLObj.ParseXML('./Settings/Read_TBL/', Settings)
+    xmlobj = XMLParseClass(mysettings['SourceCodeDir'] + "\\Vacuum_Settings.xml")
 
-        Settings['Seed-Cost_Type'] = XMLObj.ParseXML('./Settings/CAT_Workbook/Seed_Disputes/', Settings)['Cost_Type']
+    if xmlobj:
+        mysettings = xmlobj.parsexml('./Settings/Network/', mysettings)
+        mysettings = xmlobj.parsexml('./Settings/Read_Write_TBL/', mysettings)
+        mysettings = xmlobj.parsexml('./Settings/Read_TBL/', mysettings)
 
-        DF = XMLObj.ParseXML('./Settings/CAT_Workbook/BMIPCI_Review/Action/')
-        Settings['BMIPCI-Action'] = DF.loc[:, 'Action'].values
+        mysettings['Seed-Cost_Type'] = \
+            xmlobj.parsexml('./Settings/CAT_Workbook/Seed_Disputes/', mysettings)['Cost_Type']
 
-        DF = XMLObj.ParseXML('./Settings/CAT_Workbook/Dispute_Actions/Action/')
-        Settings['Dispute_Actions-Action'] = DF.loc[:, 'Action'].values
-        return Settings
+        df = xmlobj.parsexml('./Settings/CAT_Workbook/BMIPCI_Review/Action/')
+        mysettings['BMIPCI-Action'] = df.loc[:, 'Action'].values
+
+        df = xmlobj.parsexml('./Settings/CAT_Workbook/Dispute_Actions/Action/')
+        mysettings['Dispute_Actions-Action'] = df.loc[:, 'Action'].values
+        return mysettings
     else:
-        raise ValueError("Unable to load Vacuum_Settings.xml. Please check path and file {0}".format(Settings['SourceCodeDir']))
+        raise ValueError("Unable to load Vacuum_Settings.xml. Please check path and file {0}"
+                         .format(mysettings['SourceCodeDir']))
 
-def Append_Errors(DF):
-    if not DF.empty:
-        Errors.append(DF)
 
-def Get_Errors():
-    if Errors:
-        return pd.concat(Errors, ignore_index=True, sort=False).drop_duplicates().reset_index(drop=True)
+def append_errors(df):
+    if not df.empty:
+        errors.append(df)
 
-Errors = []
-Settings = dict()
-Settings = Load_Settings()
+
+def get_errors():
+    if errors:
+        return pd.concat(errors, ignore_index=True, sort=False).drop_duplicates().reset_index(drop=True)
+
+
+errors = []
+settings = load_settings()
