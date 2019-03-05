@@ -8,10 +8,16 @@ from Vacuum_DisputeActions import DisputeActions
 from Vacuum_NewUser import NewUser
 from Vacuum_NonSeeds import NonSeeds
 from Vacuum_Seeds import Seeds
+from PyQt5 import QtWidgets
+
 import pathlib as pl
-import os, gc
+import os, gc, sys
 
 gc.collect()
+
+
+def myexithandler():
+    os.system('pause')
 
 
 def process_errors():
@@ -64,6 +70,9 @@ def process_updates(files):
             del xmlobj
         del upload_date, folder_name
 
+
+app = QtWidgets.QApplication(sys.argv)
+app.aboutToQuit.connect(myexithandler)
 
 if __name__ == '__main__':
     Has_Updates = None
