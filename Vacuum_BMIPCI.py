@@ -3,9 +3,8 @@ from Vacuum_Global import SQLConnect
 from Vacuum_Global import Append_Errors
 from Vacuum_Global import Get_Errors
 
-import pandas as pd, datetime
-
-#self.DF.loc[self.DF['Gs_SrvType'] == 'LL',['Source_TBL','Source_ID','Gs_SrvID']]
+import pandas as pd, datetime, os, time
+import pathlib as pl
 
 class BMIPCI:
     def __init__(self, action, DF, upload_date):
@@ -213,15 +212,15 @@ class BMIPCI:
 
         del data, DF_Results
 
-    def GetBatch(self, AsDate=False):
+    def GetBatch(self, AsDate=False, DayOfWeek=4, WeekOffset=-1):
         current_time = datetime.datetime.now()
-        last_friday = (current_time.date()
+        batch = (current_time.date()
             - datetime.timedelta(days=current_time.weekday())
-            + datetime.timedelta(days=4, weeks=-1))
+            + datetime.timedelta(days=DayOfWeek, weeks=WeekOffset))
         if AsDate:
-            return last_friday
+            return batch
         else:
-            return last_friday.__format__("%Y%m%d")
+            return batch.__format__("%Y%m%d")
 
     def UpdateZeroRev(self, ASQL, Source, Audit_Result, Comment, Dispute=False):
         if Source == 'BMI':
@@ -661,7 +660,7 @@ class BMIPCI:
 
         del data, DF_Results
 
-    def CheckProv(self):
+    def SendToProv(self):
         ASQL = SQLConnect('alch')
         ASQL.connect()
 
@@ -811,88 +810,274 @@ class BMIPCI:
 
         del DF_Results
 
-    def CheckLV(self):
+    def FindCSRs(self):
+        self.DF['Fuzzy_File'] = self.DF['Source_TBL'] + '_' + self.DF['Source_ID']
+        self.DF['CSR_File_Name'] = None
+
+        for index, row in self.DF.iterrows():
+            CSR = [None, None]
+            Files = list(pl.Path(Settings['LV_CSR_Dir']).glob('{}*.*'.format(row['Fuzzy_File'])))
+
+            for File in Files:
+                modified = time.ctime(os.path.getmtime(File))
+
+                if CSR[0] is None or CSR[0] < modified:
+                    CSR[0] = modified
+                    CSR[1] = File
+
+            if CSR[1]:
+                row['CSR_File_Name'] = os.path.basename(CSR[1])
+        del self.DF['Fuzzy_File']
+
+    def SendToLV(self):
         ASQL = SQLConnect('alch')
-        SQL = SQLConnect('sql')
-        SQL.connect()
         ASQL.connect()
 
+        self.DF['Error_Columns'] = None
+        self.DF['Error_Message'] = None
+
+        self.FindCSRs()
         ASQL.upload(self.DF, 'mytbl')
 
-        DF_Results = SQL.query('''
-            select
-                A.*,
-                iif(B.MACNUM is null,'Macnum','Source_TBL, Source_ID') As Error_Columns,
-                iif(B.MACNUM is null,'This Macnum does not exist in CS','This Source_TBL and Source_ID is already pending in Send to LV table') As Error_Message
+        ASQL.execute('''
+            update A
+                set
+                    A.Error_Columns = 'Macnum',
+                    A.Error_Message = 'This Macnum does not exist in CS'
 
             from mytbl As A
             left join {0} As B
             on
                 A.Macnum = B.Macnum
-            left join {1} As C
+
+            where
+                B.Macnum is null
+        '''.format(Settings['Cust_File'])
+        )
+
+        ASQL.execute('''
+            update A
+                set
+                    A.Error_Columns = 'Source_TBL, Source_ID',
+                    A.Error_Message = 'This Source_TBL and Source_ID is already pending in Send to LV table'
+
+            from mytbl As A
+            inner join {0} As B
+            on
+                A.Source_TBL = B.Source_TBL
+                    and
+                A.Source_ID = B.Source_ID
+
+            where
+                B.Is_Rejected is null
+                    or
+                B.Sugg_Action is null
+        '''.format(Settings['Send_To_LV'])
+        )
+
+        ASQL.execute('''
+            insert into {0}
+            (
+                Source_TBL,
+                Source_ID,
+                Vendor,
+                BAN,
+                BTN,
+                WTN,
+                Macnum,
+                Rep,
+                Invoice_Date,
+                Comment,
+                Batch,
+                CSR_File_Name
+            )
+            select
+                A.Source_TBL,
+                A.Source_ID,
+                C.Vendor,
+                C.BAN,
+                C.BTN,
+                C.WTN,
+                A.Macnum,
+                B.Initials,
+                C.Max_CNR_Date,
+                A.Action_Reason,
+                '{3}' As Batch,
+                A.CSR_File_Name
+
+            from mytbl As A
+            inner join {1} As B
+            on
+                A.Comp_Serial = B.Comp_Serial
+            left join {2} As C
             on
                 A.Source_TBL = C.Source_TBL
                     and
                 A.Source_ID = C.Source_ID
-                    and
-                (
-                    C.Is_Rejected is null
-                        or
-                    C.Sugg_Action is null
-                )
 
             where
-                B.MACNUM is null
-                    or
-                C.STL_ID is not null'''.format(Settings['Cust_File'], Settings['Send_To_LV'])
+                A.Error_Columns is null
+        '''.format(Settings['Send_To_LV'], Settings['CAT_Emp'], Settings['CNR'], self.GetBatch(True, 7, 0))
+        )
+
+        self.UpdateZeroRev(ASQL,'BMI','Pending LV', 'Action_Reason')
+        self.UpdateZeroRev(ASQL,'PCI','Pending LV', 'Action_Reason')
+
+        DF_Results = ASQL.query('''
+            select
+                *
+            from mytbl
+
+            where
+                Error_Columns is not null
+        '''
         )
 
         ASQL.execute("drop table mytbl")
 
-        SQL.close()
         ASQL.close()
 
         Append_Errors(DF_Results)
 
         del DF_Results
 
-    def CheckDN(self):
+    def AddDN(self):
         ASQL = SQLConnect('alch')
-        SQL = SQLConnect('sql')
-        SQL.connect()
         ASQL.connect()
+
+        self.DF['Error_Columns'] = None
+        self.DF['Error_Message'] = None
 
         ASQL.upload(self.DF, 'mytbl')
 
-        DF_Results = SQL.query('''
-            select
-                A.*
+        ASQL.execute('''
+            update A
+                set
+                    A.Error_Columns = 'Source_TBL, Source_ID',
+                    A.Error_Message = 'Dispute Notes were already filed for this Source_ID today'
 
             from mytbl As A
-            left join {0} As B
+            inner join {0} As B
             on
-                B.Open_Dispute = 1
+                A.Source_TBL = B.Source_TBL
                     and
-                B.Norm_Dispute_Category = 'GRT CNR'
-            left join {1} As C
+                A.Source_ID = B.Source_ID
+            inner join {1} As C
             on
                 B.DSB_ID = C.DSB_ID
                     and
+                C.Open_Dispute = 1
+            inner join {2} As D
+            on
+                C.DS_ID = D.DS_ID
+                    and
+                D.Dispute_Category = 'GRT CNR'
+            inner join {3} As E
+            on
+                C.DH_ID = E.DH_ID
+            inner join {4} As F
+            on
+                E.DH_ID = F.DH_ID
+                    and
+                cast(F.Edit_Date as date) = cast(getdate() as date)
+            '''.format(Settings['Dispute_Staging_Bridge'],Settings['Dispute_Fact'], Settings['DisputeStaging'], Settings['Dispute_History'], Settings['Dispute_Notes'])
+        )
+
+        ASQL.execute('''
+            update A
+                set
+                    A.Error_Columns = 1
+
+            from mytbl As A
+            inner join {0} As B
+            on
+                A.Source_TBL = B.Source_TBL
+                    and
+                A.Source_ID = B.Source_ID
+            inner join {1} As C
+            on
+                B.DSB_ID = C.DSB_ID
+                    and
+                C.Open_Dispute = 1
+            inner join {2} As D
+            on
+                C.DS_ID = D.DS_ID
+                    and
+                D.Dispute_Category = 'GRT CNR'
+            inner join {3} As E
+            on
+                C.DH_ID = E.DH_ID
+
+            where
+                A.Error_Columns is null
+        '''.format(Settings['Dispute_Staging_Bridge'],Settings['Dispute_Fact'], Settings['DisputeStaging'], Settings['Dispute_History'])
+        )
+
+        ASQL.execute('''
+            insert into {0}
+            (
+                DH_ID,
+                Logged_By,
+                Norm_Note_Action,
+                Dispute_Note,
+                Days_Till_Action,
+                Edit_Date
+            )
+            select
+                F.DH_ID,
+                B.Full_Name,
+                A.Action_Norm_Reason,
+                A.Action_Reason,
+                A.Amount_Or_Days,
+                getdate()
+
+            from mytbl A
+            inner join {1} As B
+            on
+                A.Comp_Serial = B.Comp_Serial
+            inner join {2} As C
+            on
                 A.Source_TBL = C.Source_TBL
                     and
                 A.Source_ID = C.Source_ID
+            inner join {3} As D
+            on
+                C.DSB_ID = D.DSB_ID
+                    and
+                D.Open_Dispute = 1
+            inner join {4} As E
+            on
+                D.DS_ID = E.DS_ID
+                    and
+                E.Dispute_Category = 'GRT CNR'
+            inner join {5} As F
+            on
+                D.DH_ID = F.DH_ID
 
             where
-                B.DF_ID is null
-        '''.format(Settings['Dispute_Fact'],Settings['Dispute_Staging_Bridge'])
+                A.Error_Columns='1'
+        '''.format(Settings['Dispute_Notes'], Settings['CAT_Emp'], Settings['Dispute_Staging_Bridge'],Settings['Dispute_Fact'], Settings['DisputeStaging'], Settings['Dispute_History'])
         )
 
-        DF_Results['Error_Columns'] = 'Source_TBL, Source_ID'
-        DF_Results['Error_Message'] = 'There are no open GRT CNR disputes for this Source_TBL & Source_ID combo'
+        self.UpdateZeroRev(ASQL,'BMI','Dispute Review', 'Action_Reason')
+        self.UpdateZeroRev(ASQL,'PCI','Dispute Review', 'Action_Reason')
+
+        DF_Results = ASQL.query('''
+            select
+                *
+            from mytbl
+
+            where
+                isnull(Error_Columns,'') != '1'
+        '''
+        )
+
+        if not DF_Results.empty and not DF_Results[DF_Results['Error_Columns'].isnull()].empty:
+            DF_Results['Error_Message'].loc[DF_Results['Error_Columns'].isnull()] = 'There are no open STC filed GRT CNR disputes for this Source_TBL & Source_ID combo'
+            DF_Results['Error_Columns'].loc[DF_Results['Error_Columns'].isnull()] = 'Source_TBL, Source_ID'
 
         ASQL.execute("drop table mytbl")
 
-        SQL.close()
         ASQL.close()
 
         Append_Errors(DF_Results)
@@ -901,13 +1086,11 @@ class BMIPCI:
 
     def CheckED(self):
         ASQL = SQLConnect('alch')
-        SQL = SQLConnect('sql')
-        SQL.connect()
         ASQL.connect()
 
         ASQL.upload(self.DF, 'mytbl')
 
-        DF_Results = SQL.query('''
+        DF_Results = ASQL.query('''
             select
                 A.*
 
@@ -940,7 +1123,6 @@ class BMIPCI:
 
         ASQL.execute("drop table mytbl")
 
-        SQL.close()
         ASQL.close()
 
         Append_Errors(DF_Results)
@@ -1019,6 +1201,7 @@ class BMIPCI:
         del DF_Results
 
     def Process(self):
+        print("Processesing {} action".format(self.action))
 
         if self.action == 'Map':
             self.Map('LL', 'ORD_WTN','BMI')
@@ -1035,11 +1218,11 @@ class BMIPCI:
             self.Dispute('BMI', 'BMI_ID')
             self.Dispute('PCI', 'ID')
         elif self.action == 'Send to Prov':
-            self.CheckProv()
+            self.SendToProv()
         elif self.action == 'Send to LV':
-            self.CheckLV()
+            self.SendToLV()
         elif self.action == 'Dispute Note' or self.action == 'Close Disputes':
-            self.CheckDN()
+            self.AddDN()
         elif self.action == 'Escalate Disputes':
             self.CheckED()
         elif self.action == 'Paid Disputes':
