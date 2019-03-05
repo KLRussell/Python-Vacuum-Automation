@@ -43,7 +43,9 @@ class XMLParseClass:
             return DictVar
         else:
             parsed = [self.ParseElement(item) for item in self.root.findall(findpath)]
-            return pd.DataFrame(parsed)
+            DF = pd.DataFrame(parsed)
+
+            return DF.applymap(lambda x: x.strip() if isinstance(x, str) else x)
 
 #Settings['HadoopDSN']
 class SQLConnect:
