@@ -53,12 +53,13 @@ def process_updates(files):
                         df = parsed.loc[parsed['Action'] == action]
 
                         if not df.empty:
-                            xmlobj = BMIPCI(action, df, upload_date)
-                            xmlobj.process()
+                            myobj = BMIPCI(action, df)
+                            myobj.process()
 
                 elif folder_name == '02_Seeds':
                     for Cost_Type in settings['Seed-Cost_Type'].split(', '):
-                        Seeds(Cost_Type, parsed.loc[parsed['Cost_Type'] == Cost_Type], folder_name, upload_date)
+                        myobj = Seeds(Cost_Type, parsed.loc[parsed['Cost_Type'] == Cost_Type], folder_name)
+                        myobj.process()
 
                 elif folder_name == '03_Non-Seeds':
                     NonSeeds(parsed, folder_name, upload_date)
