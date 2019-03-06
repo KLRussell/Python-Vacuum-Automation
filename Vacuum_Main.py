@@ -3,6 +3,7 @@ from datetime import datetime
 from Vacuum_Global import XMLParseClass
 from Vacuum_Global import settings
 from Vacuum_Global import get_errors
+from Vacuum_Global import writelog
 from Vacuum_BMIPCI import BMIPCI
 from Vacuum_DisputeActions import DisputeActions
 from Vacuum_NewUser import NewUser
@@ -17,7 +18,7 @@ gc.collect()
 
 
 def myexithandler():
-    os.system('pause')
+    writelog('Exiting Vacuum...', 'warning')
 
 
 def process_errors():
@@ -34,11 +35,16 @@ def check_for_updates():
 
 
 def process_updates(files):
+    writeblank = False
+
     for file in files:
         upload_date = datetime.now()
         folder_name = os.path.basename(os.path.dirname(file))
 
-        print("Processing {0}/{1}".format(folder_name,os.path.basename(file)))
+        if writeblank:
+            writelog("", 'info')
+
+        writelog("Reading file ({0}/{1})".format(folder_name, os.path.basename(file)), 'info')
 
         if folder_name == '05_New_User':
             NewUser(file, upload_date)
@@ -70,12 +76,16 @@ def process_updates(files):
                 del parsed
             del xmlobj
         del upload_date, folder_name
+        writeblank = True
 
 
 app = QtWidgets.QApplication(sys.argv)
 app.aboutToQuit.connect(myexithandler)
 
 if __name__ == '__main__':
+    writelog("", 'info')
+    writelog('Starting Vacuum...', 'info')
+
     Has_Updates = None
 
     while Has_Updates is None:
