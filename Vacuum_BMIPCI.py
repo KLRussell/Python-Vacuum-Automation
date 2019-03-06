@@ -1664,7 +1664,6 @@ class BMIPCI:
                  .format(len(self.df.index), self.action), 'info')
 
     def process(self):
-        writelog("", 'info')
         writelog("Processing {0} {1} action(s)".format(len(self.df), self.action), 'info')
 
         if self.action == 'Map':
