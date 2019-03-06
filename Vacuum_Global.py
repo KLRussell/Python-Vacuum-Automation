@@ -221,9 +221,13 @@ def get_errors():
         return pd.concat(errors, ignore_index=True, sort=False).drop_duplicates().reset_index(drop=True)
 
 
+def log_filepath():
+    return os.path.join(settings['EventLogDir'],
+                        "{} Event_Log.txt".format(datetime.datetime.now().__format__("%Y%m%d")))
+
+
 def writelog(message, action='info'):
-    filepath = os.path.join(settings['EventLogDir'],
-                            "{} Event_Log.txt".format(datetime.datetime.now().__format__("%Y%m%d")))
+    filepath = log_filepath()
 
     logging.basicConfig(filename=filepath,
                         level=logging.DEBUG, format=' %(asctime)s - %(levelname)s - %(message)s')
