@@ -4,6 +4,8 @@ from Vacuum_Global import XMLParseClass
 from Vacuum_Global import settings
 from Vacuum_Global import get_errors
 from Vacuum_Global import writelog
+from Vacuum_Global import log_filepath
+
 from Vacuum_BMIPCI import BMIPCI
 from Vacuum_DisputeActions import DisputeActions
 from Vacuum_NewUser import NewUser
@@ -45,6 +47,7 @@ def process_updates(files):
             writelog("", 'info')
 
         writelog("Reading file ({0}/{1})".format(folder_name, os.path.basename(file)), 'info')
+        writelog("", 'info')
 
         if folder_name == '05_New_User':
             NewUser(file, upload_date)
@@ -83,7 +86,9 @@ app = QtWidgets.QApplication(sys.argv)
 app.aboutToQuit.connect(myexithandler)
 
 if __name__ == '__main__':
-    writelog("", 'info')
+    if os.path.isfile(log_filepath()):
+        writelog('', 'info')
+
     writelog('Starting Vacuum...', 'info')
 
     Has_Updates = None
