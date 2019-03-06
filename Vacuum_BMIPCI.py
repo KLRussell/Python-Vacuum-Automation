@@ -1,6 +1,7 @@
 from Vacuum_Global import settings
 from Vacuum_Global import SQLConnect
 from Vacuum_Global import append_errors
+from Vacuum_Global import writelog
 
 import pandas as pd, datetime, os, time
 import pathlib as pl
@@ -233,6 +234,8 @@ class BMIPCI:
         data = self.df.loc[(self.df['Gs_SrvType'] == gs_srvtype) & (self.df['Source_TBL'] == source_tbl)]
 
         if not data.empty:
+            writelog("Validating {0} maps(s) for {1}".format(len(data.index), source_tbl), 'info')
+
             asql = SQLConnect('alch')
             asql.connect()
 
@@ -337,6 +340,28 @@ class BMIPCI:
             else:
                 self.update_map(asql, source_tbl, settings['PCI_BMB'], settings['PCI'], settings['PCI_Unmapped'])
 
+            df_results = asql.query('''
+                select
+                    *
+                from mytbl2
+
+                where
+                    Error_Columns is not null
+            ''')
+
+            df_results2 = asql.query('''
+                select
+                    *
+                from mytbl2
+
+                where
+                    Error_Columns is null
+            ''')
+
+            if not df_results2.empty:
+                writelog("Completed {0} {1} action(s)"
+                         .format(len(df_results2.index), self.action), 'info')
+
             asql.execute("drop table mytbl2")
 
             asql.close()
@@ -350,7 +375,7 @@ class BMIPCI:
         data = self.df.loc[self.df['Source_TBL'] == source]
 
         if not data.empty:
-            print("Processing disputes for {}".format(source))
+            writelog("Validating {0} dispute(s) for {1}".format(len(data.index), source), 'info')
 
             if 'Start_Date' not in data.columns:
                 data['Start_Date'] = None
@@ -407,7 +432,7 @@ class BMIPCI:
                 asql.execute("drop table mytbl2")
 
             if source == 'BMI':
-                print("Grabbing MRC & OCC Cost")
+                writelog("Grabbing MRC & OCC Cost", 'info')
 
                 self.dispute_seeds(
                     asql,
@@ -433,7 +458,7 @@ class BMIPCI:
                     "inner join {0} As C on A.Source_ID = C.BMI_ID".format(settings['BMI'])
                 )
             else:
-                print("Grabbing PaperCost MRC, NRC, and FRAC Cost")
+                writelog("Grabbing PaperCost MRC, NRC, and FRAC Cost", 'info')
 
                 self.dispute_seeds(
                     asql,
@@ -482,7 +507,7 @@ class BMIPCI:
                 asql.execute("CREATE TABLE DS (DS_ID int, DSB_ID int)")
                 asql.execute("CREATE TABLE DH (DH_ID int, DSB_ID int)")
 
-                print("Disputing {} cost".format(source))
+                writelog("Disputing {} cost".format(source), 'info')
 
                 asql.execute('''
                     insert into {0}
@@ -624,7 +649,7 @@ class BMIPCI:
                 self.updatezerorev(asql, 'BMI', 'Dispute Review', 'Action_Comment', True, 'New Dispute')
                 self.updatezerorev(asql, 'PCI', 'Dispute Review', 'Action_Comment', True, 'New Dispute')
 
-                df_results = asql.query('''
+                asql.execute('''
                     with
                         MY_TMP
                     As
@@ -636,8 +661,10 @@ class BMIPCI:
                         from mytbl2
                     )
 
-                    select
-                        A.*
+                    update A
+                    set
+                        Error_Columns = 'Source_TBL, Source_ID, Start_Date',
+                        Error_Message = 'Valid cost was not found for the Source_TBL, Source_ID, Start_Date combo'
 
                     from mytbl As A
                     left join MY_TMP As B
@@ -649,22 +676,44 @@ class BMIPCI:
                     where
                         B.Source_TBL is null''')
 
-                if not df_results.empty:
-                    df_results['Error_Columns'] = 'Source_TBL, Source_ID, Start_Date'
-                    df_results['Error_Message'] = \
-                        'Valid cost was not found for the Source_TBL, Source_ID, Start_Date combo'
-
-                asql.execute("drop table mytbl, mytbl2, DS, DSB, DH")
+                asql.execute("drop table mytbl2, DS, DSB, DH")
             else:
-                print("Warning! No cost found for {} of spreadsheet".format(source))
+                writelog("Warning! No cost found for {} of spreadsheet".format(source), 'info')
 
-                df_results = asql.query('select * from mytbl')
+                asql.execute('''
+                    update A
+                    set
+                        Error_Columns = 'Source_TBL, Source_ID, Start_Date',
+                        Error_Message = 'Valid cost was not found for the Source_TBL, Source_ID, Start_Date combo'
+                    
+                    from mytbl
+                    where
+                        Error_Columns is null
+                ''')
 
-                df_results['Error_Columns'] = 'Source_TBL, Source_ID, Start_Date'
-                df_results['Error_Message'] = \
-                    'Valid cost was not found for the Source_TBL, Source_ID, Start_Date combo'
+            df_results = asql.query('''
+                select
+                    *
+                from mytbl
 
-                asql.execute("drop table mytbl")
+                where
+                    Error_Columns is not null
+            ''')
+
+            df_results2 = asql.query('''
+                select
+                    *
+                from mytbl
+
+                where
+                    Error_Columns is null
+            ''')
+
+            if not df_results2.empty:
+                writelog("Completed {0} {1} action(s)"
+                         .format(len(df_results2.index), self.action), 'info')
+
+            asql.execute("drop table mytbl")
 
             asql.close()
 
@@ -675,6 +724,8 @@ class BMIPCI:
     def sendtoprov(self):
         asql = SQLConnect('alch')
         asql.connect()
+
+        writelog("Validating {0} {1}(s)".format(len(self.df.index), self.action), 'info')
 
         self.df['Error_Columns'] = None
         self.df['Error_Message'] = None
@@ -807,6 +858,19 @@ class BMIPCI:
             where
                 Error_Columns is not null''')
 
+        df_results2 = asql.query('''
+            select
+                *
+            from mytbl
+
+            where
+                Error_Columns is null
+        ''')
+
+        if not df_results2.empty:
+            writelog("Completed {0} {1} action(s)"
+                     .format(len(df_results2.index), self.action), 'info')
+
         asql.execute("drop table mytbl, mytbl2")
 
         asql.close()
@@ -818,6 +882,8 @@ class BMIPCI:
     def sendtolv(self):
         asql = SQLConnect('alch')
         asql.connect()
+
+        writelog("Validating {0} {1}(s)".format(len(self.df.index), self.action), 'info')
 
         self.df['Error_Columns'] = None
         self.df['Error_Message'] = None
@@ -925,6 +991,8 @@ class BMIPCI:
     def adddn(self):
         asql = SQLConnect('alch')
         asql.connect()
+
+        writelog("Validating {0} {1}(s)".format(len(self.df.index), self.action), 'info')
 
         self.df['Error_Columns'] = None
         self.df['Error_Message'] = None
@@ -1079,6 +1147,19 @@ class BMIPCI:
                 Error_Columns is not null
         ''')
 
+        df_results2 = asql.query('''
+            select
+                *
+            from mytbl
+
+            where
+                Error_Columns is null
+        ''')
+
+        if not df_results2.empty:
+            writelog("Completed {0} {1} action(s)"
+                     .format(len(df_results2.index), self.action), 'info')
+
         asql.execute("drop table mytbl")
 
         asql.close()
@@ -1090,6 +1171,8 @@ class BMIPCI:
     def addescalate(self):
         asql = SQLConnect('alch')
         asql.connect()
+
+        writelog("Validating {0} {1}(s)".format(len(self.df.index), self.action), 'info')
 
         asql.upload(self.df, 'mytbl')
 
@@ -1241,6 +1324,19 @@ class BMIPCI:
                 Error_Columns is not null
         ''')
 
+        df_results2 = asql.query('''
+            select
+                *
+            from mytbl
+
+            where
+                Error_Columns is null
+        ''')
+
+        if not df_results2.empty:
+            writelog("Completed {0} {1} action(s)"
+                     .format(len(df_results2.index), self.action), 'info')
+
         asql.execute("drop table mytbl")
 
         asql.close()
@@ -1252,6 +1348,8 @@ class BMIPCI:
     def addpaid(self):
         asql = SQLConnect('alch')
         asql.connect()
+
+        writelog("Validating {0} {1}(s)".format(len(self.df.index), self.action), 'info')
 
         self.df['Error_Columns'] = None
         self.df['Error_Message'] = None
@@ -1506,6 +1604,18 @@ class BMIPCI:
             where
                 Error_Columns is not null
         ''')
+        df_results2 = asql.query('''
+            select
+                *
+            from mytbl
+            
+            where
+                Error_Columns is null
+        ''')
+
+        if not df_results2.empty:
+            writelog("Completed {0} {1} action(s)"
+                     .format(len(df_results2.index), self.action), 'info')
 
         asql.execute("drop table mytbl")
 
@@ -1531,6 +1641,9 @@ class BMIPCI:
 
         asql.close()
 
+        writelog("Completed {0} {1} action(s)"
+                 .format(len(self.df.index), self.action), 'info')
+
     def updateother(self):
         asql = SQLConnect('alch')
         asql.connect()
@@ -1547,8 +1660,12 @@ class BMIPCI:
 
         asql.close()
 
+        writelog("Completed {0} {1} action(s)"
+                 .format(len(self.df.index), self.action), 'info')
+
     def process(self):
-        print("Processesing {} action".format(self.action))
+        writelog("", 'info')
+        writelog("Processing {0} {1} action(s)".format(len(self.df), self.action), 'info')
 
         if self.action == 'Map':
             self.map('LL', 'ORD_WTN', 'BMI')
