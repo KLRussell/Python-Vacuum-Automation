@@ -5,7 +5,7 @@ from pandas.io import sql
 import sqlalchemy as mysql
 import pandas as pd
 import xml.etree.ElementTree as ET
-import os, pyodbc
+import os, pyodbc, datetime, logging
 
 
 class XMLParseClass:
@@ -178,6 +178,7 @@ def load_settings():
     updatesdir = []
 
     mysettings['SourceDir'] = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+    mysettings['EventLogDir'] = mysettings['SourceDir'] + "\\02_Event_Log"
     mysettings['SourceCodeDir'] = mysettings['SourceDir'] + "\\03_Source_Code"
 
     updatesdir.append(mysettings['SourceDir'] + "\\01_Updates\\01_BMI-PCI")
@@ -211,12 +212,34 @@ def load_settings():
 
 def append_errors(df):
     if not df.empty:
+        writelog('{} Error(s) found. Appending to virtual list'.format(len(df.index)), 'warning')
         errors.append(df)
 
 
 def get_errors():
     if errors:
         return pd.concat(errors, ignore_index=True, sort=False).drop_duplicates().reset_index(drop=True)
+
+
+def writelog(message, action='info'):
+    filepath = os.path.join(settings['EventLogDir'],
+                            "{} Event_Log.txt".format(datetime.datetime.now().__format__("%Y%m%d")))
+
+    logging.basicConfig(filename=filepath,
+                        level=logging.DEBUG, format=' %(asctime)s - %(levelname)s - %(message)s')
+
+    print('{0} - {1} - {2}'.format(datetime.datetime.now(), action.upper(), message))
+
+    if action == 'debug':
+        logging.debug(message)
+    elif action == 'info':
+        logging.info(message)
+    elif action == 'warning':
+        logging.warning(message)
+    elif action == 'error':
+        logging.error(message)
+    elif action == 'critical':
+        logging.critical(message)
 
 
 errors = []
