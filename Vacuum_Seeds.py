@@ -1,13 +1,15 @@
 from Vacuum_Global import settings
 from Vacuum_Global import SQLConnect
 from Vacuum_Global import getbatch
+from Vacuum_Global import validatecol
 from Vacuum_Global import processresults
 
 
 class Seeds:
     args = dict()
 
-    def __init__(self, df=None):
+    def __init__(self, folder_name, df=None):
+        self.folder_name = folder_name
         self.df = df
         self.setdefaults()
 
@@ -86,6 +88,8 @@ class Seeds:
                 from myseeds As A
 
                 where
+                    A.Error_Columns is null
+                        and
                     A.Source_TBL = 'PCI'
             ''')
 
@@ -104,7 +108,10 @@ class Seeds:
                 select
                     {2}
 
-                from myseeds;'''.format(settings['Dispute_Staging_Bridge'], self.args['DSB_Cols'], self.args['DSB_Sel']))
+                from myseeds
+                
+                where
+                    Error_Columns is null;'''.format(settings['Dispute_Staging_Bridge'], self.args['DSB_Cols'], self.args['DSB_Sel']))
 
             asql.execute('''
                 insert into {0}
@@ -128,6 +135,9 @@ class Seeds:
                 inner join DSB
                 on
                     {4}
+                    
+                where
+                    A.Error_Columns is null
             '''.format(settings['DisputeStaging'], settings['CAT_Emp'], self.args['DS_Cols']
                        , self.args['DS_Sel'], self.args['DSB_On']))
 
@@ -155,6 +165,8 @@ class Seeds:
                     {4}
 
                 where
+                    A.Error_Columns is null
+                        and
                     {5}
             '''.format(settings['Dispute_History'], settings['CAT_Emp'], self.args['DH_Cols']
                        , self.args['DH_Sel'], self.args['DSB_On'], self.args['DH_Whr']))
@@ -190,6 +202,47 @@ class Seeds:
             asql = SQLConnect('alch')
             asql.connect()
             asql.upload(self.df, 'myseeds')
+
+            validatecol(asql, 'myseeds', 'Dispute_Amount')
+            validatecol(asql, 'myseeds', 'Approved_Amt')
+            validatecol(asql, 'myseeds', 'Received_Amt')
+            validatecol(asql, 'myseeds', 'Received_Invoice_Date', True)
+
+            for cost_type in settings['Seed-Cost_Type']:
+                if 'PC-' in cost_type:
+                    table = settings['PaperCost']
+                    seed = 'seed'
+                elif 'LPC' == cost_type:
+                    table = settings[cost_type]
+                    seed = 'invoice'
+                else:
+                    table = settings[cost_type]
+                    seed = 'bdt_{0}_id'.format(cost_type)
+
+                if 'PC-' in cost_type:
+                    record_type = cost_type.split('-')[1]
+                elif cost_type == 'OCC':
+                    record_type = 'B.Activity_Type'
+                else:
+                    record_type = "'{0}'".format(cost_type)
+
+                asql.execute('''
+                    update A
+                        set
+                            A.Error_Columns = iif(B.{1} is null,'Cost_Type, Cost_Type_Seed',NULL),
+                            A.Error_Message = iif(B.{1} is null,'Cost_Type_Seed does not exist',NULL),
+                            A.Record_Type = {3}
+                            
+                    from myseeds as A
+                    left join {0} as B
+                    on
+                        A.Cost_Type_Seed = B.{1}
+                    
+                    where
+                        A.Error_Columns is null
+                            and
+                        A.Cost_Type = '{2}'
+                '''.format(table, seed, cost_type, record_type))
 
             self.appenddisputes(asql)
             asql.close()
