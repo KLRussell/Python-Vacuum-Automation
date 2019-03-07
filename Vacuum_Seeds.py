@@ -245,6 +245,7 @@ class Seeds:
                 '''.format(table, seed, cost_type, record_type))
 
             self.appenddisputes(asql)
+            processresults(self.folder_name, asql, 'myseeds', 'New Seed Disputes')
             asql.close()
         else:
             self.appenddisputes(asql)
