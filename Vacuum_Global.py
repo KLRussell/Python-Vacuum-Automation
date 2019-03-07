@@ -213,15 +213,18 @@ def load_settings():
                          .format(mysettings['SourceCodeDir']))
 
 
-def append_errors(df):
+def append_errors(folder_name, df):
     if not df.empty:
         writelog('{} Error(s) found. Appending to virtual list'.format(len(df.index)), 'warning')
-        errors.append(df)
+        if folder_name not in errors:
+            errors[folder_name] = []
+
+        errors[folder_name].append(df)
 
 
-def get_errors():
-    if errors:
-        return pd.concat(errors, ignore_index=True, sort=False).drop_duplicates().reset_index(drop=True)
+def get_errors(folder_name):
+    if folder_name in errors:
+        return pd.concat(errors[folder_name], ignore_index=True, sort=False).drop_duplicates().reset_index(drop=True)
 
 
 def log_filepath():
@@ -259,7 +262,7 @@ def getbatch(asdate=False, dayofweek=4, weekoffset=-1):
         return batch.__format__("%Y%m%d")
 
 
-def processresults(asql, table, action):
+def processresults(folder_name, asql, table, action):
     df_results = asql.query('''
             select
                 *
@@ -272,11 +275,84 @@ def processresults(asql, table, action):
         writelog("Completed {0} {1} action(s)"
                  .format(len(success.index), action), 'info')
 
-    append_errors(df_results.loc[df_results['Error_Columns'].isnull()])
+    append_errors(folder_name, df_results.loc[df_results['Error_Columns'].isnull()])
     asql.execute("drop table mytbl")
 
     del df_results, success
 
 
-errors = []
+def validatecol(asql, table, column, isdate=False):
+    if isdate:
+        asql.execute('''
+            update A
+                set
+                    A.Error_Columns = '{0}',
+                    A.Error_Message = '{0} is not a date'
+
+            from {1} As A
+
+            where
+                A.Error_Columns is null
+                    and
+                isdate(A.{0}) != 1
+        '''.format(column, table))
+
+        asql.execute('''
+            update A
+                set
+                    A.Error_Columns = '{0}',
+                    A.Error_Message = '{0} is not the end of the month'
+
+            from {1} As A
+
+            where
+                A.Error_Columns is null
+                    and
+                A.{0} != eomonth(A.{0})
+        '''.format(column, table))
+
+        asql.execute('''
+            update A
+                set
+                    A.Error_Columns = '{0}',
+                    A.Error_Message = '{0} is in the past'
+
+            from {1} As A
+
+            where
+                A.Error_Columns is null
+                    and
+                A.{0} < getdate()
+        '''.format(column, table))
+    else:
+        asql.execute('''
+            update A
+                set
+                    A.Error_Columns = 'Amount_Or_Days',
+                    A.Error_Message = 'Amount_Or_Days is not numeric'
+    
+            from {1} As A
+    
+            where
+                A.Error_Columns is null
+                    and
+                isnumeric(A.Amount_Or_Days) != 1
+        '''.format(column, table))
+
+        asql.execute('''
+            update A
+                set
+                    A.Error_Columns = '{0}',
+                    A.Error_Message = '{0} is <= 0'
+    
+            from {1} As A
+    
+            where
+                A.Error_Columns is null
+                    and
+                A.{0} <= 0
+        '''.format(column, table))
+
+
+errors = dict()
 settings = load_settings()
