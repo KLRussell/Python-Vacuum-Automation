@@ -1,197 +1,106 @@
+from time import sleep
+from datetime import datetime
+from PyQt5 import QtWidgets
+from Vacuum_Global import XMLParseClass
 from Vacuum_Global import settings
-from Vacuum_Global import SQLConnect
-from Vacuum_Global import getbatch
-from Vacuum_Global import processresults
+from Vacuum_Global import get_errors
+from Vacuum_Global import writelog
+from Vacuum_Global import log_filepath
+from Vacuum_BMIPCI import BMIPCI
+from Vacuum_DisputeActions import DisputeActions
+from Vacuum_NewUser import NewUser
+from Vacuum_NonSeeds import NonSeeds
+from Vacuum_Seeds import Seeds
+
+import pathlib as pl
+import os
+import gc
+import sys
+
+gc.collect()
 
 
-class Seeds:
-    args = dict()
+def myexithandler():
+    writelog('Exiting Vacuum...', 'warning')
 
-    def __init__(self, df=None):
-        self.df = df
-        self.setdefaults()
 
-    def setdefaults(self):
-        if self.df.empty:
-            self.args['DSB_Cols'] = 'USI, STC_Claim_Number, Source_TBL, Source_ID'
-            self.args['DSB_Sel'] = '''USI, '{0}_' + left(Record_Type,1) + cast(Seed as varchar), Source_TBL
-                , Source_ID'''.format(getbatch())
-            self.args['DSB_On'] = '''DSB.Stc_Claim_Number='{0}_' + left(A.Record_Type,1) + cast(A.Seed as varchar)
-                '''.format(getbatch())
-            self.args['DS_Cols'] = '''DSB_ID, Rep, STC_Claim_Number, Dispute_Type, Dispute_Category, Audit_Type
-                , Cost_Type, Cost_Type_Seed,  Record_Type, Dispute_Reason, PON, Comment, Confidence, Batch_DT'''
-            self.args['DS_Sel'] = '''DSB.DSB_ID, B.Full_Name, '{0}_' + left(A.Record_Type,1) + cast(A.Seed as varchar)
-                , A.Claim_Channel, 'GRT CNR', 'CNR Audit', A.Cost_Type, A.Seed, A.Record_Type, A.Action_Reason
-                , A.PON, A.Action_Comment, A.Confidence, '{1}'
-                '''.format(getbatch(), getbatch(True))
-            self.args['DH_Cols'] = '''DSB_ID, Dispute_Category, Display_Status, Date_Submitted, Dispute_Reason
-                , GRT_Update_Rep, Date_Updated, Source_File'''
-            self.args['DH_Sel'] = '''DSB.DSB_ID, 'GRT CNR', 'Filed', getdate(), A.Action_Reason, B.Full_Name
-                , getdate(), 'GRT Email: ' + format(getdate(),'yyyyMMdd')'''
-            self.args['DH_Whr'] = "A.Claim_Channel = 'Email'"
+def process_errors():
+    df = get_errors()
+    if not df.empty:
+        writelog('Processing {0} items from Error virtual list'.format(len(df.index)))
+    del df
+
+
+def check_for_updates():
+    for DirPath in settings['UpdatesDir']:
+        files = list(pl.Path(DirPath).glob('*.xml'))
+        if files:
+            return files
+
+
+def process_updates(files):
+    writeblank = False
+
+    for file in files:
+        upload_date = datetime.now()
+        folder_name = os.path.basename(os.path.dirname(file))
+
+        if writeblank:
+            writelog("", 'info')
+
+        writelog("Reading file ({0}/{1})".format(folder_name, os.path.basename(file)), 'info')
+        writelog("", 'info')
+
+        if folder_name == '05_New_User':
+            NewUser(file, upload_date)
         else:
-            self.args['DSB_Cols'] = 'USI, STC_Claim_Number, Dispute_Amount'
-            self.args['DSB_Sel'] = '''USI, '{0}_' + left(Record_Type,1) + cast(Cost_Type_Seed as varchar)
-            '''.format(getbatch())
-            self.args['DSB_On'] = '''
-                DSB.Stc_Claim_Number='{0}_' + left(A.Record_Type,1) + cast(A.Cost_Type_Seed as varchar)
-                '''.format(getbatch())
-            self.args['DS_Cols'] = '''DSB_ID, Rep, Dispute_Type, Cost_Type, Cost_Type_Seed, USOC, USOC_Desc
-            , Record_Type, Dispute_Category, Audit_Type, STC_Claim_Number, Claimed_Amt, Dispute_Reason
-            , Billed_Phrase_Code, Causing_SO, PON, CLLI, Usage_Rate, MOU, Jurisdiction, Short_Paid, Comment
-            , Comment, Confidence, Batch_DT'''
-            self.args['DS_Sel'] = '''DSB.DSB_ID, B.Full_Name, A.Dispute_Type, A.Cost_Type, A.Cost_Type_Seed, A.USOC
-            , A.USOC_Desc, A.Record_Type, A.Dispute_Category, A.Audit_Type
-            , '{0}_' + left(A.Record_Type,1) + cast(A.Cost_Type_Seed as varchar), A.Dispute_Amt, A.Dispute_Reason
-            , A.Phrase_Code, A.Causing_SO, A.PON, A.CLLI, A.Usage_Rate, A.MOU, A.Jurisdiction, A.Short_Paid
-            , A.Comment, A.Confidence, '{1}'
-            '''.format(getbatch(), getbatch(True))
-            self.args['DH_Cols'] = '''DSB_ID, Dispute_Category, Display_Status, Date_Submitted, Dispute_Reason
-                , ILEC_Confirmation, ILEC_Comments, Credit_Approved, Credit_Received_Amount
-                , Credit_Received_Invoice_Date, GRT_Update_Rep, Date_Updated, Source_File'''
-            self.args['DH_Sel'] = '''DSB.DSB_ID, A.Dispute_Category, A.Display_Status, getdate()
-                , A.Dispute_Reason, A.ILEC_Confirmation, A.ILEC_Comment, A.Approved_Amt, A.Received_Amt
-                , A.Received_Invoice_Date, GRT_Update_Rep, getdate(), 'GRT Email: ' + format(getdate(),'yyyyMMdd')'''
-            self.args['DH_Whr'] = "A.Dispute_Type = 'Email'"
+            xmlobj = XMLParseClass(file)
 
-            cols = '''dispute_type, cost_type, cost_type_seed, dispute_category, audit_type, confidence, dispute_reason
-                            , record_type, usi, dispute_amt, usoc, usoc_desc, pon, phrase_code, causing_so, clli
-                            , usage_rate, mou, jurisdiction, short_paid, comment, dispute_status, ilec_confirmation
-                            , ilec_comment, approved_amt, received_amt, received_invoice_date'''.split(', ')
+            if xmlobj:
+                parsed = xmlobj.parsexml('./{urn:schemas-microsoft-com:rowset}data/')
 
-            for col in cols:
-                if col not in self.df.columns:
-                    self.df[col] = None
+                if folder_name == '01_BMI-PCI':
+                    for action in settings['BMIPCI-Action']:
+                        df = parsed.loc[parsed['Action'] == action]
 
-    def appenddisputes(self, asql):
-        if asql.query("select object_id('myseeds')").iloc[0, 0]:
-            # writelog("Disputing {} cost".format(source), 'info')
-            if asql.query("select object_id('DS')").iloc[0, 0]:
-                asql.execute("DROP TABLE DS")
+                        if not df.empty:
+                            myobj = BMIPCI(action, df)
+                            myobj.process()
 
-            if asql.query("select object_id('DSB')").iloc[0, 0]:
-                asql.execute("DROP TABLE DSB")
+                elif folder_name == '02_Seeds':
+                    myobj = Seeds(parsed)
+                    myobj.dispute()
 
-            if asql.query("select object_id('DH')").iloc[0, 0]:
-                asql.execute("DROP TABLE DH")
+                elif folder_name == '03_Non-Seeds':
+                    NonSeeds(parsed, folder_name, upload_date)
 
-            asql.execute("CREATE TABLE DSB (DSB_ID int, Stc_Claim_Number varchar(255))")
-            asql.execute("CREATE TABLE DS (DS_ID int, DSB_ID int)")
-            asql.execute("CREATE TABLE DH (DH_ID int, DSB_ID int)")
+                elif folder_name == '04_Dispute-Actions':
+                    for action in settings['Dispute_Actions-Action']:
+                        DisputeActions(action, parsed.loc[parsed['Action'] == action], folder_name, upload_date)
+                del parsed
+            del xmlobj
+        del upload_date, folder_name
+        writeblank = True
 
-            asql.execute('''
-                update A
-                    set A.Claim_Channel = 'Email'
 
-                from myseeds As A
+app = QtWidgets.QApplication(sys.argv).instance()
+app.aboutToQuit.connect(myexithandler)
 
-                where
-                    A.Source_TBL = 'PCI'
-            ''')
+if __name__ == '__main__':
+    if os.path.isfile(log_filepath()):
+        writelog('', 'info')
 
-            asql.execute('''
-                insert into {0}
-                (
-                    {1}
-                )
+    writelog('Starting Vacuum...', 'info')
 
-                OUTPUT
-                    INSERTED.DSB_ID,
-                    INSERTED.Stc_Claim_Number
+    Has_Updates = None
 
-                INTO DSB
+    while Has_Updates is None:
+        Has_Updates = check_for_updates()
+        sleep(1)
 
-                select
-                    {2}
+    process_updates(Has_Updates)
+    process_errors()
 
-                from myseeds;'''.format(settings['Dispute_Staging_Bridge'], self.args['DSB_Cols'], self.args['DSB_Sel']))
+    os.system('pause')
 
-            asql.execute('''
-                insert into {0}
-                (
-                    {2}
-                )
-
-                OUTPUT
-                    INSERTED.DS_ID,
-                    INSERTED.DSB_ID
-
-                INTO DS
-
-                select
-                    {3}
-
-                from myseeds As A
-                inner join {1} As B
-                on
-                    A.Comp_Serial = B.Comp_Serial
-                inner join DSB
-                on
-                    {4}
-            '''.format(settings['DisputeStaging'], settings['CAT_Emp'], self.args['DS_Cols']
-                       , self.args['DS_Sel'], self.args['DSB_On']))
-
-            asql.execute('''
-                insert into {0}
-                (
-                    {2}
-                )
-
-                OUTPUT
-                    INSERTED.DH_ID,
-                    INSERTED.DSB_ID
-
-                INTO DH
-
-                select
-                    {3}
-
-                from myseeds As A
-                inner join {1} As B
-                on
-                    A.Comp_Serial = B.Comp_Serial
-                inner join DSB
-                on
-                    {4}
-
-                where
-                    {5}
-            '''.format(settings['Dispute_History'], settings['CAT_Emp'], self.args['DH_Cols']
-                       , self.args['DH_Sel'], self.args['DSB_On'], self.args['DH_Whr']))
-
-            asql.execute('''
-                insert into {0}
-                (
-                    DS_ID,
-                    DSB_ID,
-                    DH_ID,
-                    Open_Dispute
-                )
-                select
-                    DS.DS_ID,
-                    DS.DSB_ID,
-                    DH.DH_ID,
-                    1
-
-                from DSB
-                inner join DS
-                on
-                    DSB.DSB_ID = DS.DSB_ID
-                left join DH
-                on
-                    DSB.DSB_ID = DH.DSB_ID
-            '''.format(settings['Dispute_Fact']))
-
-            asql.execute('drop table myseeds, DS, DSB, DH')
-
-    def dispute(self, asql=None):
-        if not asql:
-            # NEED TO POPULATE RECORD_TYPE, VALIDATE ERRORS, AND APPEND ERRORS TO VIRTUAL LIST
-            asql = SQLConnect('alch')
-            asql.connect()
-            asql.upload(self.df, 'myseeds')
-
-            self.appenddisputes(asql)
-            asql.close()
-        else:
-            self.appenddisputes(asql)
+gc.collect()
