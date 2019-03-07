@@ -5,7 +5,10 @@ from pandas.io import sql
 import sqlalchemy as mysql
 import pandas as pd
 import xml.etree.ElementTree as ET
-import os, pyodbc, datetime, logging
+import os
+import pyodbc
+import datetime
+import logging
 
 
 class XMLParseClass:
@@ -244,6 +247,35 @@ def writelog(message, action='info'):
         logging.error(message)
     elif action == 'critical':
         logging.critical(message)
+
+
+def getbatch(asdate=False, dayofweek=4, weekoffset=-1):
+    current_time = datetime.datetime.now()
+    batch = (current_time.date() - datetime.timedelta(days=current_time.weekday()) +
+             datetime.timedelta(days=dayofweek, weeks=weekoffset))
+    if asdate:
+        return batch
+    else:
+        return batch.__format__("%Y%m%d")
+
+
+def processresults(asql, table, action):
+    df_results = asql.query('''
+            select
+                *
+            from {0}
+        '''.format(table))
+
+    success = df_results.loc[df_results['Error_Columns'].notnull()]
+
+    if not success.empty:
+        writelog("Completed {0} {1} action(s)"
+                 .format(len(success.index), action), 'info')
+
+    append_errors(df_results.loc[df_results['Error_Columns'].isnull()])
+    asql.execute("drop table mytbl")
+
+    del df_results, success
 
 
 errors = []
