@@ -1,20 +1,21 @@
 from time import sleep
 from datetime import datetime
+from PyQt5 import QtWidgets
 from Vacuum_Global import XMLParseClass
 from Vacuum_Global import settings
 from Vacuum_Global import get_errors
 from Vacuum_Global import writelog
 from Vacuum_Global import log_filepath
-
 from Vacuum_BMIPCI import BMIPCI
 from Vacuum_DisputeActions import DisputeActions
 from Vacuum_NewUser import NewUser
 from Vacuum_NonSeeds import NonSeeds
 from Vacuum_Seeds import Seeds
-from PyQt5 import QtWidgets
 
 import pathlib as pl
-import os, gc, sys
+import os
+import gc
+import sys
 
 gc.collect()
 
@@ -25,7 +26,8 @@ def myexithandler():
 
 def process_errors():
     df = get_errors()
-    print(df)
+    if not df.empty:
+        writelog('Processing {0} items from Error virtual list'.format(len(df.index)))
     del df
 
 
@@ -66,9 +68,8 @@ def process_updates(files):
                             myobj.process()
 
                 elif folder_name == '02_Seeds':
-                    for Cost_Type in settings['Seed-Cost_Type'].split(', '):
-                        myobj = Seeds(Cost_Type, parsed.loc[parsed['Cost_Type'] == Cost_Type], folder_name)
-                        myobj.process()
+                    myobj = Seeds(parsed)
+                    myobj.dispute()
 
                 elif folder_name == '03_Non-Seeds':
                     NonSeeds(parsed, folder_name, upload_date)
@@ -82,7 +83,7 @@ def process_updates(files):
         writeblank = True
 
 
-app = QtWidgets.QApplication(sys.argv)
+app = QtWidgets.QApplication(sys.argv).instance()
 app.aboutToQuit.connect(myexithandler)
 
 if __name__ == '__main__':
