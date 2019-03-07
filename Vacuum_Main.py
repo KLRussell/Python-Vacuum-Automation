@@ -12,6 +12,7 @@ from Vacuum_NewUser import NewUser
 from Vacuum_NonSeeds import NonSeeds
 from Vacuum_Seeds import Seeds
 
+import pandas as pd
 import pathlib as pl
 import os
 import gc
@@ -25,15 +26,17 @@ def myexithandler():
 
 
 def process_errors():
-    df = get_errors()
-    if not df.empty:
-        writelog('Processing {0} items from Error virtual list'.format(len(df.index)))
+    df = pd.DataFrame()
+    for dirpath in settings['UpdatesDir']:
+        df = get_errors(os.path.basename(dirpath))
+        if not df.empty:
+            writelog('Processing {0} items from Error virtual list'.format(len(df.index)))
     del df
 
 
 def check_for_updates():
-    for DirPath in settings['UpdatesDir']:
-        files = list(pl.Path(DirPath).glob('*.xml'))
+    for dirpath in settings['UpdatesDir']:
+        files = list(pl.Path(dirpath).glob('*.xml'))
         if files:
             return files
 
@@ -64,11 +67,11 @@ def process_updates(files):
                         df = parsed.loc[parsed['Action'] == action]
 
                         if not df.empty:
-                            myobj = BMIPCI(action, df)
+                            myobj = BMIPCI(action, df, folder_name)
                             myobj.process()
 
                 elif folder_name == '02_Seeds':
-                    myobj = Seeds(parsed)
+                    myobj = Seeds(parsed, folder_name)
                     myobj.dispute()
 
                 elif folder_name == '03_Non-Seeds':
