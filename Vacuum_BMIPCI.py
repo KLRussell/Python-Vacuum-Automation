@@ -3,6 +3,7 @@ from Vacuum_Global import SQLConnect
 from Vacuum_Global import writelog
 from Vacuum_Global import getbatch
 from Vacuum_Global import processresults
+from Vacuum_Global import validatecol
 from Vacuum_Seeds import Seeds
 
 import os
@@ -11,9 +12,10 @@ import pathlib as pl
 
 
 class BMIPCI:
-    def __init__(self, action, df):
+    def __init__(self, action, df, folder_name):
         self.action = action
         self.df = df
+        self.folder_name = folder_name
 
     @staticmethod
     def update_map(asql, source_tbl, bmb_tbl, bmm_tbl, unmapped_tbl):
@@ -101,7 +103,9 @@ class BMIPCI:
                 {3} As Seed,
                 '{5}' As Cost_Type,
                 {6} As Record_Type,
-                {4}
+                {4},
+                NULL As Error_Columns,
+                NULL As Error_Message
 
             from mytbl As A
             {7}
@@ -126,7 +130,9 @@ class BMIPCI:
                     Seed,
                     Cost_Type,
                     Record_Type,
-                    {0}
+                    {0},
+                    Error_Columns,
+                    Error_Message
                 )
             '''.format(cols2) + myquery)
 
@@ -333,7 +339,7 @@ class BMIPCI:
             else:
                 self.update_map(asql, source_tbl, settings['PCI_BMB'], settings['PCI'], settings['PCI_Unmapped'])
 
-            processresults(asql, 'mytbl2', self.action)
+            processresults(self.folder_name, asql, 'mytbl2', self.action)
             asql.close()
 
         del data
@@ -481,7 +487,7 @@ class BMIPCI:
                     where
                         B.Source_TBL is null''')
 
-                myobj = Seeds()
+                myobj = Seeds(self.folder_name)
                 myobj.dispute(asql)
             else:
                 writelog("Warning! No cost found for {} of spreadsheet".format(source), 'info')
@@ -497,7 +503,7 @@ class BMIPCI:
                         Error_Columns is null
                 ''')
 
-            processresults(asql, 'mytbl', self.action)
+            processresults(self.folder_name, asql, 'mytbl', self.action)
             asql.close()
 
         del data
@@ -631,7 +637,7 @@ class BMIPCI:
         self.updatezerorev(asql, 'BMI', 'Pending Prov', 'Action_Reason', False, 'Sent to Prov')
         self.updatezerorev(asql, 'PCI', 'Pending Prov', 'Action_Reason', False, 'Sent to Prov')
 
-        processresults(asql, 'mytbl', self.action)
+        processresults(self.folder_name, asql, 'mytbl', self.action)
         asql.execute("drop table mytbl2")
         asql.close()
 
@@ -728,7 +734,7 @@ class BMIPCI:
         self.updatezerorev(asql, 'BMI', 'Pending LV', 'Action_Reason', False, 'Sent to LV')
         self.updatezerorev(asql, 'PCI', 'Pending LV', 'Action_Reason', False, 'Sent to LV')
 
-        processresults(asql, 'mytbl', self.action)
+        processresults(self.folder_name, asql, 'mytbl', self.action)
         asql.close()
 
     def adddn(self):
@@ -881,7 +887,7 @@ class BMIPCI:
                     Error_Columns is null
             ''')
 
-        processresults(asql, 'mytbl', self.action)
+        processresults(self.folder_name, asql, 'mytbl', self.action)
         asql.close()
 
     def addescalate(self):
@@ -1031,7 +1037,7 @@ class BMIPCI:
                     Error_Columns is null
             ''')
 
-        processresults(asql, 'mytbl', self.action)
+        processresults(self.folder_name, asql, 'mytbl', self.action)
         asql.close()
 
     def addpaid(self):
@@ -1045,73 +1051,8 @@ class BMIPCI:
 
         asql.upload(self.df, 'mytbl')
 
-        asql.execute('''
-            update A
-                set
-                    A.Error_Columns = 'Amount_Or_Days',
-                    A.Error_Message = 'Amount_Or_Days is not numeric'
-            
-            from mytbl As A
-            
-            where
-                isnumeric(A.Amount_Or_Days) != 1
-        ''')
-
-        asql.execute('''
-            update A
-                set
-                    A.Error_Columns = 'Amount_Or_Days',
-                    A.Error_Message = 'Amount_Or_Days is <= 0'
-
-            from mytbl As A
-
-            where
-                A.Error_Columns is null
-                    and
-                A.Amount_Or_Days <= 0
-        ''')
-
-        asql.execute('''
-            update A
-                set
-                    A.Error_Columns = 'Credit_Invoice_Date',
-                    A.Error_Message = 'Credit_Invoice_Date is not a date'
-
-            from mytbl As A
-
-            where
-                A.Error_Columns is null
-                    and
-                isdate(A.Credit_Invoice_Date) != 1
-        ''')
-
-        asql.execute('''
-            update A
-                set
-                    A.Error_Columns = 'Credit_Invoice_Date',
-                    A.Error_Message = 'Credit_Invoice_Date is not the end of the month'
-
-            from mytbl As A
-
-            where
-                A.Error_Columns is null
-                    and
-                A.Credit_Invoice_Date != eomonth(A.Credit_Invoice_Date)
-        ''')
-
-        asql.execute('''
-            update A
-                set
-                    A.Error_Columns = 'Credit_Invoice_Date',
-                    A.Error_Message = 'Credit_Invoice_Date is in the past'
-
-            from mytbl As A
-
-            where
-                A.Error_Columns is null
-                    and
-                A.Credit_Invoice_Date < getdate()
-        ''')
+        validatecol(asql, 'mytbl', 'Amount_Or_Days')
+        validatecol(asql, 'mytbl', 'Credit_Invoice_Date', True)
 
         asql.upload(asql.query('''
             select
@@ -1285,7 +1226,7 @@ class BMIPCI:
                     A.Error_Columns is null
             ''')
 
-        processresults(asql, 'mytbl', self.action)
+        processresults(self.folder_name, asql, 'mytbl', self.action)
         asql.close()
 
     def sendtoaudit(self):
