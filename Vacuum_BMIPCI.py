@@ -5,6 +5,7 @@ from Vacuum_Global import getbatch
 from Vacuum_Global import processresults
 from Vacuum_Global import validatecol
 from Vacuum_Seeds import Seeds
+from Vacuum_Global import defaultheader
 
 import os
 import time
@@ -12,19 +13,24 @@ import pathlib as pl
 
 
 class BMIPCI:
+    asql = None
+
     def __init__(self, action, df, folder_name):
         self.action = action
         self.df = df
         self.folder_name = folder_name
+        self.df = defaultheader(self.df, '''action, gs_srvtype, gs_srvid, action_comment, action_norm_reason
+            , action_reason, usi, start_date, claim_channel, confidence, pon, macnum, audit_group, prov_category
+            , prov_recommendation, prov_norm_reason, prov_sub_reason, amount_or_days, credit_invoice_date
+            , error_columns, error_message''')
 
-    @staticmethod
-    def update_map(asql, source_tbl, bmb_tbl, bmm_tbl, unmapped_tbl):
+    def update_map(self, source_tbl, bmb_tbl, bmm_tbl, unmapped_tbl):
             param = None
 
             if source_tbl == 'BMI':
                 param = ", C.frameID=B.initials"
 
-            asql.execute('''
+            self.asql.execute('''
                 insert into {1}
                 (
                     gs_srvID,
@@ -49,7 +55,7 @@ class BMIPCI:
                     A.Error_Columns is null
                 '''.format(source_tbl, bmb_tbl, settings['CAT_Emp']))
 
-            asql.execute('''
+            self.asql.execute('''
                 update C
                     set
                         C.gs_SrvID=iif(A.BMB=1,A.Source_ID,A.gs_SrvID),
@@ -69,7 +75,7 @@ class BMIPCI:
                     A.Error_Columns is null
                 '''.format(source_tbl, bmm_tbl, settings['CAT_Emp'], param))
 
-            asql.execute('''
+            self.asql.execute('''
                 insert into {1}
                 (
                     {0}_ID,
@@ -94,8 +100,7 @@ class BMIPCI:
                     A.Error_Columns is null
             '''.format(source_tbl, unmapped_tbl, settings['CAT_Emp']))
 
-    @staticmethod
-    def grab_seeds(asql, data, tbl, seed, on, where, cost_type, record_type, inner=""):
+    def grab_seeds(self, data, tbl, seed, on, where, cost_type, record_type, inner=""):
         cols = "A." + ", A.".join(data.loc[:, ~data.columns.isin(['Action', 'Start_Date'])].columns.values)
 
         myquery = '''
@@ -116,15 +121,15 @@ class BMIPCI:
                 {2}
         '''.format(tbl, on, where, seed, cols, cost_type, record_type, inner)
 
-        if not asql.query("select object_id('mytbl2')").iloc[0, 0]:
-            myresults = asql.query(myquery)
+        if not self.asql.query("select object_id('mytbl2')").iloc[0, 0]:
+            myresults = self.asql.query(myquery)
 
             if not myresults.empty:
-                asql.upload(myresults, 'myseeds')
+                self.asql.upload(myresults, 'myseeds')
         else:
             cols2 = ",".join(data.loc[:, ~data.columns.isin(['Action', 'Start_Date'])].columns.values)
 
-            asql.execute('''
+            self.asql.execute('''
                 insert into myseeds
                 (
                     Seed,
@@ -136,8 +141,7 @@ class BMIPCI:
                 )
             '''.format(cols2) + myquery)
 
-    @staticmethod
-    def updatezerorev(asql, source, audit_result, comment, dispute=False, action=None):
+    def updatezerorev(self, source, audit_result, comment, dispute=False, action=None):
         if comment and action:
             mycomment = "concat('{1} - ', A.{0})".format(comment, action)
         elif comment:
@@ -153,7 +157,7 @@ class BMIPCI:
             zerorevtbl = settings['PCI_ZeroRevenue']
 
         if dispute:
-            asql.upload(asql.query('''
+            self.asql.upload(self.asql.query('''
                 select distinct
                     Source_ID,
                     Action_Comment
@@ -164,7 +168,7 @@ class BMIPCI:
                     Source_TBL = '{0}'
             '''.format(source)), 'mydata')
         else:
-            asql.upload(asql.query('''
+            self.asql.upload(self.asql.query('''
                 select
                     *
                 from mytbl
@@ -175,8 +179,8 @@ class BMIPCI:
                     Source_TBL = '{0}'
             '''.format(source)), 'mydata')
 
-        if asql.query("select object_id('mydata')").iloc[0, 0]:
-            asql.execute('''
+        if self.asql.query("select object_id('mydata')").iloc[0, 0]:
+            self.asql.execute('''
                 INSERT INTO {0}
                 (
                     {1}_ID,
@@ -207,7 +211,7 @@ class BMIPCI:
                     A.Comp_Serial = C.Comp_Serial
             '''.format(zerorevtbl, source, settings['CNR'], settings['CAT_Emp'], audit_result, mycomment))
 
-            asql.execute('DROP TABLE mydata')
+            self.asql.execute('DROP TABLE mydata')
 
     def findcsrs(self):
         self.df['Fuzzy_File'] = self.df['Source_TBL'] + '_' + self.df['Source_ID']
@@ -235,21 +239,9 @@ class BMIPCI:
         if not data.empty:
             writelog("Validating {0} maps(s) for {1}".format(len(data.index), source_tbl), 'info')
 
-            asql = SQLConnect('alch')
-            asql.connect()
+            self.asql.upload(data, 'mytbl')
 
-            if 'action_comment' not in data.columns:
-                data['Action_Comment'] = None
-
-            data['Error_Columns'] = None
-            data['Error_Message'] = None
-
-            asql.upload(data, 'mytbl')
-
-            if asql.query("select object_id('mytbl2')").iloc[0, 0]:
-                asql.execute("drop table mytbl2")
-
-            asql.upload(asql.query('''
+            self.asql.upload(self.asql.query('''
                 with
                     MYTMP
                 As
@@ -284,9 +276,9 @@ class BMIPCI:
                     *
                 from MYTMP2'''.format(",".join(data.loc[:, data.columns != 'Gs_SrvID'].columns.values))), 'mytbl2')
 
-            asql.execute("drop table mytbl;")
+            self.asql.execute("drop table mytbl;")
 
-            asql.execute('''
+            self.asql.execute('''
                 update A
                     set
                         A.Error_Columns = 'Gs_SrvType, Gs_SrvID',
@@ -300,7 +292,7 @@ class BMIPCI:
                 where
                     B.{1} is null'''.format(settings[gs_srvtype], col))
 
-            asql.execute('''
+            self.asql.execute('''
                 update A
                     A.Error_Columns = 'Gs_SrvType, Gs_SrvID',
                     A.Error_Message = 'BMB table is already mapped to ' + Gs_SrvType + ' ' + cast(Gs_SrvID as varchar)
@@ -317,7 +309,7 @@ class BMIPCI:
                 where
                     A.BMB = 1'''.format(settings['BMB']))
 
-            asql.execute('''
+            self.asql.execute('''
                 update A
                     A.Error_Columns = 'Gs_SrvType, Gs_SrvID',
                     A.Error_Message = 'BMB table is already mapped to ' + Gs_SrvType + ' ' + cast(Gs_SrvID as varchar)
@@ -335,12 +327,11 @@ class BMIPCI:
                     A.BMB = 1'''.format(settings['PCI_BMB']))
 
             if source_tbl == 'BMI':
-                self.update_map(asql, source_tbl, settings['BMB'], settings['BMM'], settings['Unmapped'])
+                self.update_map(source_tbl, settings['BMB'], settings['BMM'], settings['Unmapped'])
             else:
-                self.update_map(asql, source_tbl, settings['PCI_BMB'], settings['PCI'], settings['PCI_Unmapped'])
+                self.update_map(source_tbl, settings['PCI_BMB'], settings['PCI'], settings['PCI_Unmapped'])
 
-            processresults(self.folder_name, asql, 'mytbl2', self.action)
-            asql.close()
+            processresults(self.folder_name, self.asql, 'mytbl2', self.action)
 
         del data
 
@@ -350,25 +341,11 @@ class BMIPCI:
         if not data.empty:
             writelog("Validating {0} dispute(s) for {1}".format(len(data.index), source), 'info')
 
-            if 'Start_Date' not in data.columns:
-                data['Start_Date'] = None
-                data['Start_Date'] = data['Start_Date'].astype('datetime64[D]')
+            data['Start_Date'] = data['Start_Date'].astype('datetime64[D]')
 
-            if 'USI' not in data.columns:
-                data['USI'] = None
+            self.asql.upload(data, 'mytbl')
 
-            if 'PON' not in data.columns:
-                data['PON'] = None
-
-            if 'Action_Comment' not in data.columns:
-                data['Action_Comment'] = None
-
-            asql = SQLConnect('alch')
-            asql.connect()
-
-            asql.upload(data, 'mytbl')
-
-            asql.execute('''
+            self.asql.execute('''
                 update A
                     set A.Start_Date = dateadd(day, (-1 * C.Dispute_Limit) + 15, getdate())
                 from mytbl As A
@@ -383,7 +360,7 @@ class BMIPCI:
                     A.Start_Date is null
                 '''.format(source_col, settings[source], settings['Limitations']))
 
-            asql.execute('''
+            self.asql.execute('''
                 update A
                     set A.Start_Date = eomonth(dateadd(month, -1, A.Start_Date))
                 from mytbl As A
@@ -391,14 +368,13 @@ class BMIPCI:
                 where
                     A.Start_Date is not null''')
 
-            if asql.query("select object_id('myseeds')").iloc[0, 0]:
-                asql.execute("drop table myseeds")
+            if self.asql.query("select object_id('myseeds')").iloc[0, 0]:
+                self.asql.execute("drop table myseeds")
 
             if source == 'BMI':
                 writelog("Grabbing MRC & OCC Cost", 'info')
 
                 self.grab_seeds(
-                    asql,
                     data,
                     settings['MRC'],
                     'BDT_MRC_ID',
@@ -409,7 +385,6 @@ class BMIPCI:
                 )
 
                 self.grab_seeds(
-                    asql,
                     data,
                     settings['OCC'],
                     'BDT_OCC_ID',
@@ -424,7 +399,6 @@ class BMIPCI:
                 writelog("Grabbing PaperCost MRC, NRC, and FRAC Cost", 'info')
 
                 self.grab_seeds(
-                    asql,
                     data,
                     settings['PaperCost'],
                     'Seed',
@@ -435,7 +409,6 @@ class BMIPCI:
                 )
 
                 self.grab_seeds(
-                    asql,
                     data,
                     settings['PaperCost'],
                     'Seed',
@@ -446,7 +419,6 @@ class BMIPCI:
                 )
 
                 self.grab_seeds(
-                    asql,
                     data,
                     settings['PaperCost'],
                     'Seed',
@@ -456,11 +428,11 @@ class BMIPCI:
                     "'FRAC'"
                 )
 
-            if asql.query("select object_id('myseeds')").iloc[0, 0]:
-                self.updatezerorev(asql, 'BMI', 'Dispute Review', 'Action_Comment', True, 'New Dispute')
-                self.updatezerorev(asql, 'PCI', 'Dispute Review', 'Action_Comment', True, 'New Dispute')
+            if self.asql.query("select object_id('myseeds')").iloc[0, 0]:
+                self.updatezerorev('BMI', 'Dispute Review', 'Action_Comment', True, 'New Dispute')
+                self.updatezerorev('PCI', 'Dispute Review', 'Action_Comment', True, 'New Dispute')
 
-                asql.execute('''
+                self.asql.execute('''
                     with
                         MY_TMP
                     As
@@ -487,12 +459,12 @@ class BMIPCI:
                     where
                         B.Source_TBL is null''')
 
-                myobj = Seeds(self.folder_name)
-                myobj.dispute(asql)
+                myobj = Seeds(self.folder_name, self.asql)
+                myobj.dispute()
             else:
                 writelog("Warning! No cost found for {} of spreadsheet".format(source), 'info')
 
-                asql.execute('''
+                self.asql.execute('''
                     update A
                     set
                         Error_Columns = 'Source_TBL, Source_ID, Start_Date',
@@ -503,23 +475,15 @@ class BMIPCI:
                         Error_Columns is null
                 ''')
 
-            processresults(self.folder_name, asql, 'mytbl', self.action)
-            asql.close()
-
+            processresults(self.folder_name, self.asql, 'mytbl', self.action)
         del data
 
     def sendtoprov(self):
-        asql = SQLConnect('alch')
-        asql.connect()
-
         writelog("Validating {0} {1}(s)".format(len(self.df.index), self.action), 'info')
 
-        self.df['Error_Columns'] = None
-        self.df['Error_Message'] = None
+        self.asql.upload(self.df, 'mytbl')
 
-        asql.upload(self.df, 'mytbl')
-
-        asql.execute('''
+        self.asql.execute('''
             update A
                 set
                     A.Error_Columns = 'Macnum',
@@ -532,7 +496,7 @@ class BMIPCI:
             where
                 B.MACNUM is null'''.format(settings['Cust_File']))
 
-        asql.execute('''
+        self.asql.execute('''
             update A
                 set
                     A.Error_Columns = 'Source_TBL, Source_ID',
@@ -552,7 +516,7 @@ class BMIPCI:
                     and
                 B.New_Root_Cause is null'''.format(settings['Send_To_Prov']))
 
-        asql.upload(asql.query('''
+        self.asql.upload(self.asql.query('''
             select distinct
                 DATA.*,
                 CNR.Vendor,
@@ -579,7 +543,7 @@ class BMIPCI:
                 DATA.Source_ID = MRC.BMI_ID
         '''.format(settings['CNR'], settings['MRC'])), 'mytbl2')
 
-        asql.execute('''
+        self.asql.execute('''
             insert into {0}
             (
                 Batch,
@@ -634,26 +598,19 @@ class BMIPCI:
             where
                 A.Error_Columns is null'''.format(settings['Send_To_Prov'], settings['CAT_Emp']))
 
-        self.updatezerorev(asql, 'BMI', 'Pending Prov', 'Action_Reason', False, 'Sent to Prov')
-        self.updatezerorev(asql, 'PCI', 'Pending Prov', 'Action_Reason', False, 'Sent to Prov')
+        self.updatezerorev('BMI', 'Pending Prov', 'Action_Reason', False, 'Sent to Prov')
+        self.updatezerorev('PCI', 'Pending Prov', 'Action_Reason', False, 'Sent to Prov')
 
-        processresults(self.folder_name, asql, 'mytbl', self.action)
-        asql.execute("drop table mytbl2")
-        asql.close()
+        processresults(self.folder_name, self.asql, 'mytbl', self.action)
+        self.asql.execute("drop table mytbl2")
 
     def sendtolv(self):
-        asql = SQLConnect('alch')
-        asql.connect()
-
         writelog("Validating {0} {1}(s)".format(len(self.df.index), self.action), 'info')
 
-        self.df['Error_Columns'] = None
-        self.df['Error_Message'] = None
-
         self.findcsrs()
-        asql.upload(self.df, 'mytbl')
+        self.asql.upload(self.df, 'mytbl')
 
-        asql.execute('''
+        self.asql.execute('''
             update A
                 set
                     A.Error_Columns = 'Macnum',
@@ -668,7 +625,7 @@ class BMIPCI:
                 B.Macnum is null
         '''.format(settings['Cust_File']))
 
-        asql.execute('''
+        self.asql.execute('''
             update A
                 set
                     A.Error_Columns = 'Source_TBL, Source_ID',
@@ -687,7 +644,7 @@ class BMIPCI:
                 B.Sugg_Action is null
         '''.format(settings['Send_To_LV']))
 
-        asql.execute('''
+        self.asql.execute('''
             insert into {0}
             (
                 Source_TBL,
@@ -731,24 +688,17 @@ class BMIPCI:
                 A.Error_Columns is null
         '''.format(settings['Send_To_LV'], settings['CAT_Emp'], settings['CNR'], getbatch(True, 7, 0)))
 
-        self.updatezerorev(asql, 'BMI', 'Pending LV', 'Action_Reason', False, 'Sent to LV')
-        self.updatezerorev(asql, 'PCI', 'Pending LV', 'Action_Reason', False, 'Sent to LV')
+        self.updatezerorev('BMI', 'Pending LV', 'Action_Reason', False, 'Sent to LV')
+        self.updatezerorev('PCI', 'Pending LV', 'Action_Reason', False, 'Sent to LV')
 
-        processresults(self.folder_name, asql, 'mytbl', self.action)
-        asql.close()
+        processresults(self.folder_name, self.asql, 'mytbl', self.action)
 
     def adddn(self):
-        asql = SQLConnect('alch')
-        asql.connect()
-
         writelog("Validating {0} {1}(s)".format(len(self.df.index), self.action), 'info')
 
-        self.df['Error_Columns'] = None
-        self.df['Error_Message'] = None
+        self.asql.upload(self.df, 'mytbl')
 
-        asql.upload(self.df, 'mytbl')
-
-        asql.execute('''
+        self.asql.execute('''
             update A
                 set
                     A.Error_Columns = 'Source_TBL, Source_ID',
@@ -781,7 +731,7 @@ class BMIPCI:
             '''.format(settings['Dispute_Staging_Bridge'], settings['Dispute_Fact'], settings['DisputeStaging'],
                        settings['Dispute_History'], settings['Dispute_Notes']))
 
-        asql.upload(asql.query('''
+        self.asql.upload(self.asql.query('''
             select
                 F.DH_ID,
                 B.Full_Name,
@@ -818,8 +768,8 @@ class BMIPCI:
         '''.format(settings['CAT_Emp'], settings['Dispute_Staging_Bridge'],
                    settings['Dispute_Fact'], settings['DisputeStaging'], settings['Dispute_History'])), 'mytbl2')
 
-        if not asql.query("select object_id('mytbl2')").iloc[0, 0]:
-            asql.execute('''
+        if not self.asql.query("select object_id('mytbl2')").iloc[0, 0]:
+            self.asql.execute('''
                 insert into {0}
                 (
                     DH_ID,
@@ -840,7 +790,7 @@ class BMIPCI:
                 from mytbl
             '''.format(settings['Dispute_Notes']))
 
-            asql.execute('''
+            self.asql.execute('''
                 WITH
                     MYTMP
                 AS
@@ -870,12 +820,12 @@ class BMIPCI:
                     A.Error_Columns is null
             ''')
 
-            self.updatezerorev(asql, 'BMI', 'Dispute Review', 'Action_Reason', False, 'Dispute Note')
-            self.updatezerorev(asql, 'PCI', 'Dispute Review', 'Action_Reason', False, 'Dispute Note')
+            self.updatezerorev('BMI', 'Dispute Review', 'Action_Reason', False, 'Dispute Note')
+            self.updatezerorev('PCI', 'Dispute Review', 'Action_Reason', False, 'Dispute Note')
 
-            asql.execute("drop table mytbl2")
+            self.asql.execute("drop table mytbl2")
         else:
-            asql.execute('''
+            self.asql.execute('''
                 update A
                     set
                         A.Error_Columns = 'Source_TBL, Source_ID',
@@ -887,18 +837,14 @@ class BMIPCI:
                     Error_Columns is null
             ''')
 
-        processresults(self.folder_name, asql, 'mytbl', self.action)
-        asql.close()
+        processresults(self.folder_name, self.asql, 'mytbl', self.action)
 
     def addescalate(self):
-        asql = SQLConnect('alch')
-        asql.connect()
-
         writelog("Validating {0} {1}(s)".format(len(self.df.index), self.action), 'info')
 
-        asql.upload(self.df, 'mytbl')
+        self.asql.upload(self.df, 'mytbl')
 
-        asql.upload(asql.query('''
+        self.asql.upload(self.asql.query('''
             select
                 A.*,
                 E.DSB_ID,
@@ -933,10 +879,10 @@ class BMIPCI:
         '''.format(settings['Dispute_Staging_Bridge'], settings['Dispute_Fact'], settings['DisputeStaging'],
                    settings['Dispute_History'])), 'mytbl2')
 
-        if not asql.query("select object_id('mytbl2')").iloc[0, 0]:
-            asql.execute("CREATE TABLE DH (DH_ID int, DSB_ID int)")
+        if not self.asql.query("select object_id('mytbl2')").iloc[0, 0]:
+            self.asql.execute("CREATE TABLE DH (DH_ID int, DSB_ID int)")
 
-            asql.execute('''
+            self.asql.execute('''
                 INSERT INTO {0}
                 (
                     DSB_ID,
@@ -979,7 +925,7 @@ class BMIPCI:
                     A.Comp_Serial = B.Comp_Serial
             '''.format(settings['Dispute_History'], settings['CAT_Emp'], getbatch()))
 
-            asql.execute('''
+            self.asql.execute('''
                 UPDATE A
                 SET
                     A.DH_ID = B.DH_ID
@@ -990,7 +936,7 @@ class BMIPCI:
                     A.DSB_ID = B.DSB_ID
             '''.format(settings['Dispute_Fact']))
 
-            asql.execute('''
+            self.asql.execute('''
                 WITH
                     MYTMP
                 AS
@@ -1005,7 +951,8 @@ class BMIPCI:
                 update A
                     set
                         A.Error_Columns = 'Source_TBL, Source_ID',
-                        A.Error_Message = 'There are no open Denied - Pending GRT CNR disputes for this Source_TBL & Source_ID combo'
+                        A.Error_Message = 
+                        'There are no open Denied - Pending GRT CNR disputes for this Source_TBL & Source_ID combo'
                 
                 FROM mytbl As A
                 LEFT JOIN mytbl2 As B
@@ -1020,16 +967,17 @@ class BMIPCI:
                     A.Error_Columns is null
             ''')
 
-            self.updatezerorev(asql, 'BMI', 'Dispute Review', 'Action_Reason', False, 'GRT Escalate')
-            self.updatezerorev(asql, 'PCI', 'Dispute Review', 'Action_Reason', False, 'GRT Escalate')
+            self.updatezerorev('BMI', 'Dispute Review', 'Action_Reason', False, 'GRT Escalate')
+            self.updatezerorev('PCI', 'Dispute Review', 'Action_Reason', False, 'GRT Escalate')
 
-            asql.execute("drop table mytbl2, DH")
+            self.asql.execute("drop table mytbl2, DH")
         else:
-            asql.execute('''
+            self.asql.execute('''
                 update A
                     set
                         A.Error_Columns = 'Source_TBL, Source_ID',
-                        A.Error_Message = 'There are no open Denied - Pending GRT CNR disputes for this Source_TBL & Source_ID combo'
+                        A.Error_Message = 
+                        'There are no open Denied - Pending GRT CNR disputes for this Source_TBL & Source_ID combo'
                 
                 FROM mytbl
                 
@@ -1037,24 +985,17 @@ class BMIPCI:
                     Error_Columns is null
             ''')
 
-        processresults(self.folder_name, asql, 'mytbl', self.action)
-        asql.close()
+        processresults(self.folder_name, self.asql, 'mytbl', self.action)
 
     def addpaid(self):
-        asql = SQLConnect('alch')
-        asql.connect()
-
         writelog("Validating {0} {1}(s)".format(len(self.df.index), self.action), 'info')
 
-        self.df['Error_Columns'] = None
-        self.df['Error_Message'] = None
+        self.asql.upload(self.df, 'mytbl')
 
-        asql.upload(self.df, 'mytbl')
+        validatecol(self.asql, 'mytbl', 'Amount_Or_Days')
+        validatecol(self.asql, 'mytbl', 'Credit_Invoice_Date', True)
 
-        validatecol(asql, 'mytbl', 'Amount_Or_Days')
-        validatecol(asql, 'mytbl', 'Credit_Invoice_Date', True)
-
-        asql.upload(asql.query('''
+        self.asql.upload(self.asql.query('''
             select
                 A.*,
                 E.DSB_ID,
@@ -1106,10 +1047,10 @@ class BMIPCI:
         '''.format(settings['Dispute_Staging_Bridge'], settings['Dispute_Fact'], settings['DisputeStaging'],
                    settings['Dispute_History'])), 'mytbl2')
 
-        if not asql.query("select object_id('mytbl2')").iloc[0, 0]:
-            asql.execute("CREATE TABLE DH (DH_ID int, DSB_ID int)")
+        if not self.asql.query("select object_id('mytbl2')").iloc[0, 0]:
+            self.asql.execute("CREATE TABLE DH (DH_ID int, DSB_ID int)")
 
-            asql.execute('''
+            self.asql.execute('''
                 INSERT INTO {0}
                 (
                     DSB_ID,
@@ -1165,7 +1106,7 @@ class BMIPCI:
                     A.Comp_Serial = B.Comp_Serial
             '''.format(settings['Dispute_History'], settings['CAT_Emp'], getbatch()))
 
-            asql.execute('''
+            self.asql.execute('''
                 UPDATE A
                 SET
                     A.DH_ID = B.DH_ID,
@@ -1177,7 +1118,7 @@ class BMIPCI:
                     A.DSB_ID = B.DSB_ID
             '''.format(settings['Dispute_Fact']))
 
-            asql.execute('''
+            self.asql.execute('''
                 WITH
                     MYTMP
                 AS
@@ -1208,12 +1149,12 @@ class BMIPCI:
                     A.Error_Columns is null
             ''')
 
-            self.updatezerorev(asql, 'BMI', 'Dispute Review', None, False, 'GRT Paid')
-            self.updatezerorev(asql, 'PCI', 'Dispute Review', None, False, 'GRT Paid')
+            self.updatezerorev('BMI', 'Dispute Review', None, False, 'GRT Paid')
+            self.updatezerorev('PCI', 'Dispute Review', None, False, 'GRT Paid')
 
-            asql.execute("drop table mytbl2, DH")
+            self.asql.execute("drop table mytbl2, DH")
         else:
-            asql.execute('''
+            self.asql.execute('''
                 UPDATE A
                     SET
                         A.Error_Columns = 'Source_TBL, Source_ID',
@@ -1226,49 +1167,35 @@ class BMIPCI:
                     A.Error_Columns is null
             ''')
 
-        processresults(self.folder_name, asql, 'mytbl', self.action)
-        asql.close()
+        processresults(self.folder_name, self.asql, 'mytbl', self.action)
 
     def sendtoaudit(self):
-        asql = SQLConnect('alch')
-        asql.connect()
+        self.asql.upload(self.df, 'mytbl')
 
-        asql.upload(self.df, 'mytbl')
+        self.updatezerorev('BMI', 'Audit Review', None, False, 'Send to Audit')
+        self.updatezerorev('PCI', 'Audit Review', None, False, 'Send to Audit')
 
-        self.df['Error_Columns'] = None
-        self.df['Error_Message'] = None
-
-        self.updatezerorev(asql, 'BMI', 'Audit Review', None, False, 'Send to Audit')
-        self.updatezerorev(asql, 'PCI', 'Audit Review', None, False, 'Send to Audit')
-
-        asql.execute("drop table mytbl")
-
-        asql.close()
+        self.asql.execute("drop table mytbl")
 
         writelog("Completed {0} {1} action(s)"
                  .format(len(self.df.index), self.action), 'info')
 
     def updateother(self):
-        asql = SQLConnect('alch')
-        asql.connect()
+        self.asql.upload(self.df, 'mytbl')
 
-        asql.upload(self.df, 'mytbl')
+        self.updatezerorev('BMI', self.action, 'Action_Comment')
+        self.updatezerorev('PCI', self.action, 'Action_Comment')
 
-        self.df['Error_Columns'] = None
-        self.df['Error_Message'] = None
-
-        self.updatezerorev(asql, 'BMI', self.action, 'Action_Comment')
-        self.updatezerorev(asql, 'PCI', self.action, 'Action_Comment')
-
-        asql.execute("drop table mytbl")
-
-        asql.close()
+        self.asql.execute("drop table mytbl")
 
         writelog("Completed {0} {1} action(s)"
                  .format(len(self.df.index), self.action), 'info')
 
     def process(self):
         writelog("Processing {0} {1} action(s)".format(len(self.df), self.action), 'info')
+
+        self.asql = SQLConnect('alch')
+        self.asql.connect()
 
         if self.action == 'Map':
             self.map('LL', 'ORD_WTN', 'BMI')
@@ -1298,3 +1225,5 @@ class BMIPCI:
             self.sendtoaudit()
         else:
             self.updateother()
+
+        self.asql.close()
