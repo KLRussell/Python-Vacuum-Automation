@@ -768,6 +768,7 @@ class BMIPCI:
         '''.format(settings['CAT_Emp'], settings['Dispute_Staging_Bridge'],
                    settings['Dispute_Fact'], settings['DisputeStaging'], settings['Dispute_History'])), 'mytbl2')
 
+        # migrate section to Vacuum_DisputeActions
         if not self.asql.query("select object_id('mytbl2')").iloc[0, 0]:
             self.asql.execute('''
                 insert into {0}
@@ -819,6 +820,7 @@ class BMIPCI:
                         and
                     A.Error_Columns is null
             ''')
+            # migrate section to Vacuum_DisputeActions END
 
             self.updatezerorev('BMI', 'Dispute Review', 'Action_Reason', False, 'Dispute Note')
             self.updatezerorev('PCI', 'Dispute Review', 'Action_Reason', False, 'Dispute Note')
@@ -879,6 +881,7 @@ class BMIPCI:
         '''.format(settings['Dispute_Staging_Bridge'], settings['Dispute_Fact'], settings['DisputeStaging'],
                    settings['Dispute_History'])), 'mytbl2')
 
+        # migrate section to Vacuum_DisputeActions
         if not self.asql.query("select object_id('mytbl2')").iloc[0, 0]:
             self.asql.execute("CREATE TABLE DH (DH_ID int, DSB_ID int)")
 
@@ -966,6 +969,7 @@ class BMIPCI:
                         and
                     A.Error_Columns is null
             ''')
+            # migrate section to Vacuum_DisputeActions END
 
             self.updatezerorev('BMI', 'Dispute Review', 'Action_Reason', False, 'GRT Escalate')
             self.updatezerorev('PCI', 'Dispute Review', 'Action_Reason', False, 'GRT Escalate')
@@ -1047,6 +1051,7 @@ class BMIPCI:
         '''.format(settings['Dispute_Staging_Bridge'], settings['Dispute_Fact'], settings['DisputeStaging'],
                    settings['Dispute_History'])), 'mytbl2')
 
+        # migrate section to Vacuum_DisputeActions
         if not self.asql.query("select object_id('mytbl2')").iloc[0, 0]:
             self.asql.execute("CREATE TABLE DH (DH_ID int, DSB_ID int)")
 
@@ -1148,6 +1153,7 @@ class BMIPCI:
                         and
                     A.Error_Columns is null
             ''')
+            # migrate section to Vacuum_DisputeActions END
 
             self.updatezerorev('BMI', 'Dispute Review', None, False, 'GRT Paid')
             self.updatezerorev('PCI', 'Dispute Review', None, False, 'GRT Paid')
@@ -1219,6 +1225,7 @@ class BMIPCI:
             self.adddn()
         elif self.action == 'Escalate Disputes':
             self.addescalate()
+        # Need to add action Closed here and use core elements from Vacuum_DisputeActions
         elif self.action == 'Paid Disputes':
             self.addpaid()
         elif self.action == 'Send to Audit':
