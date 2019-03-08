@@ -283,6 +283,17 @@ def processresults(folder_name, asql, table, action):
     del df_results, success
 
 
+def defaultheader(df, columns):
+    if not df.none and columns:
+        columns.replace(chr(10), '').replace(chr(32), '').split(',')
+
+        for col in columns:
+            if col not in df.columns.str.lower():
+                df[col] = None
+
+        return df
+
+
 def validatecol(asql, table, column, isdate=False, isbilldate=False):
     if isdate:
         asql.execute('''
