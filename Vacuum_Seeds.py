@@ -73,7 +73,6 @@ class Seeds:
 
     def appenddisputes(self, asql):
         if asql.query("select object_id('myseeds')").iloc[0, 0]:
-            # writelog("Disputing {} cost".format(source), 'info')
             if asql.query("select object_id('DS')").iloc[0, 0]:
                 asql.execute("DROP TABLE DS")
 
