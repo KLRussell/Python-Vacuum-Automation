@@ -18,22 +18,38 @@ class DisputeActions:
             , action_reason, assign_rep, note_tag, attachment, ilec_confirmation, error_columns, error_message''')
 
     def escalate(self):
+        # migrate core elements from Vacuum_Global escalate function
+        self.asql.execute('''
+            
+        ''')
 
     def close(self):
+        # migrate core elements from Vacuum_Global close function
+        self.asql.execute('''
+
+        ''')
 
     def paid(self):
+        # migrate core elements from Vacuum_Global paid function
         validatecol(self.asql, 'grtactions', 'Amount')
         validatecol(self.asql, 'grtactions', 'Credit_Invoice_Date', True)
 
     def denied(self):
+        self.asql.execute('''
+
+        ''')
 
     def approved(self):
         validatecol(self.asql, 'grtactions', 'Amount')
 
     def disputenote(self):
+        # migrate core elements from Vacuum_Global dispute note function
+        self.asql.execute('''
+
+        ''')
 
     def process(self):
-        writelog("Processing {0} New Non-Seed Disputes".format(len(self.df)), 'info')
+        writelog("Processing {0} GRT Dispute Actions".format(len(self.df)), 'info')
 
         self.asql = SQLConnect('alch')
         self.asql.connect()
