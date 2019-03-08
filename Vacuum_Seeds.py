@@ -3,18 +3,22 @@ from Vacuum_Global import SQLConnect
 from Vacuum_Global import getbatch
 from Vacuum_Global import validatecol
 from Vacuum_Global import processresults
+from Vacuum_Global import writelog
+
+import pandas as pd
 
 
 class Seeds:
     args = dict()
 
-    def __init__(self, folder_name, df=None):
+    def __init__(self, folder_name, df=pd.DataFrame()):
         self.folder_name = folder_name
         self.df = df
         self.setdefaults()
 
     def setdefaults(self):
         if self.df.empty:
+            self.args['email'] = "A.Source_TBL = 'PCI'"
             self.args['DSB_Cols'] = 'USI, STC_Claim_Number, Source_TBL, Source_ID'
             self.args['DSB_Sel'] = '''USI, '{0}_' + left(Record_Type,1) + cast(Seed as varchar), Source_TBL
                 , Source_ID'''.format(getbatch())
@@ -32,8 +36,9 @@ class Seeds:
                 , getdate(), 'GRT Email: ' + format(getdate(),'yyyyMMdd')'''
             self.args['DH_Whr'] = "A.Claim_Channel = 'Email'"
         else:
+            self.args['email'] = "A.Dispute_Type = 'Email'"
             self.args['DSB_Cols'] = 'USI, STC_Claim_Number, Dispute_Amount'
-            self.args['DSB_Sel'] = '''USI, '{0}_' + left(Record_Type,1) + cast(Cost_Type_Seed as varchar)
+            self.args['DSB_Sel'] = '''USI, '{0}_' + left(Record_Type,1) + cast(Cost_Type_Seed as varchar), dispute_amt
             '''.format(getbatch())
             self.args['DSB_On'] = '''
                 DSB.Stc_Claim_Number='{0}_' + left(A.Record_Type,1) + cast(A.Cost_Type_Seed as varchar)
@@ -41,7 +46,7 @@ class Seeds:
             self.args['DS_Cols'] = '''DSB_ID, Rep, Dispute_Type, Cost_Type, Cost_Type_Seed, USOC, USOC_Desc
             , Record_Type, Dispute_Category, Audit_Type, STC_Claim_Number, Claimed_Amt, Dispute_Reason
             , Billed_Phrase_Code, Causing_SO, PON, CLLI, Usage_Rate, MOU, Jurisdiction, Short_Paid, Comment
-            , Comment, Confidence, Batch_DT'''
+            , Confidence, Batch_DT'''
             self.args['DS_Sel'] = '''DSB.DSB_ID, B.Full_Name, A.Dispute_Type, A.Cost_Type, A.Cost_Type_Seed, A.USOC
             , A.USOC_Desc, A.Record_Type, A.Dispute_Category, A.Audit_Type
             , '{0}_' + left(A.Record_Type,1) + cast(A.Cost_Type_Seed as varchar), A.Dispute_Amt, A.Dispute_Reason
@@ -51,18 +56,19 @@ class Seeds:
             self.args['DH_Cols'] = '''DSB_ID, Dispute_Category, Display_Status, Date_Submitted, Dispute_Reason
                 , ILEC_Confirmation, ILEC_Comments, Credit_Approved, Credit_Received_Amount
                 , Credit_Received_Invoice_Date, GRT_Update_Rep, Date_Updated, Source_File'''
-            self.args['DH_Sel'] = '''DSB.DSB_ID, A.Dispute_Category, A.Display_Status, getdate()
+            self.args['DH_Sel'] = '''DSB.DSB_ID, A.Dispute_Category, A.Dispute_Status, getdate()
                 , A.Dispute_Reason, A.ILEC_Confirmation, A.ILEC_Comment, A.Approved_Amt, A.Received_Amt
-                , A.Received_Invoice_Date, GRT_Update_Rep, getdate(), 'GRT Email: ' + format(getdate(),'yyyyMMdd')'''
+                , A.Received_Invoice_Date, B.Full_Name, getdate(), 'GRT Email: ' + format(getdate(),'yyyyMMdd')'''
             self.args['DH_Whr'] = "A.Dispute_Type = 'Email'"
 
             cols = '''dispute_type, cost_type, cost_type_seed, dispute_category, audit_type, confidence, dispute_reason
                             , record_type, usi, dispute_amt, usoc, usoc_desc, pon, phrase_code, causing_so, clli
                             , usage_rate, mou, jurisdiction, short_paid, comment, dispute_status, ilec_confirmation
-                            , ilec_comment, approved_amt, received_amt, received_invoice_date'''.split(', ')
+                            , ilec_comment, approved_amt, received_amt, received_invoice_date, Error_Columns
+                            , Error_Message'''.replace(chr(10), '').replace(chr(32), '').split(',')
 
             for col in cols:
-                if col not in self.df.columns:
+                if col not in self.df.columns.str.lower():
                     self.df[col] = None
 
     def appenddisputes(self, asql):
@@ -83,15 +89,15 @@ class Seeds:
 
             asql.execute('''
                 update A
-                    set A.Claim_Channel = 'Email'
+                    set {0}
 
                 from myseeds As A
 
                 where
                     A.Error_Columns is null
                         and
-                    A.Source_TBL = 'PCI'
-            ''')
+                    {1}
+            '''.format(self.args['DH_Whr'], self.args['email']))
 
             asql.execute('''
                 insert into {0}
@@ -111,7 +117,8 @@ class Seeds:
                 from myseeds
                 
                 where
-                    Error_Columns is null;'''.format(settings['Dispute_Staging_Bridge'], self.args['DSB_Cols'], self.args['DSB_Sel']))
+                    Error_Columns is null;'''.format(settings['Dispute_Staging_Bridge']
+                                                     , self.args['DSB_Cols'], self.args['DSB_Sel']))
 
             asql.execute('''
                 insert into {0}
@@ -194,27 +201,31 @@ class Seeds:
                     DSB.DSB_ID = DH.DSB_ID
             '''.format(settings['Dispute_Fact']))
 
-            asql.execute('drop table myseeds, DS, DSB, DH')
+            asql.execute('drop table DS, DSB, DH')
 
     def dispute(self, asql=None):
         if not asql:
             # NEED TO POPULATE RECORD_TYPE, VALIDATE ERRORS, AND APPEND ERRORS TO VIRTUAL LIST
+            writelog("Processing {0} New Seed Disputes".format(len(self.df)), 'info')
             asql = SQLConnect('alch')
             asql.connect()
             asql.upload(self.df, 'myseeds')
 
-            validatecol(asql, 'myseeds', 'Dispute_Amount')
+            validatecol(asql, 'myseeds', 'Dispute_Amt')
             validatecol(asql, 'myseeds', 'Approved_Amt')
             validatecol(asql, 'myseeds', 'Received_Amt')
             validatecol(asql, 'myseeds', 'Received_Invoice_Date', True)
 
-            for cost_type in settings['Seed-Cost_Type']:
+            for cost_type in settings['Seed-Cost_Type'].split(', '):
                 if 'PC-' in cost_type:
                     table = settings['PaperCost']
                     seed = 'seed'
                 elif 'LPC' == cost_type:
                     table = settings[cost_type]
-                    seed = 'invoice'
+                    seed = 'bdt_invoice_id'
+                elif 'ADJ' == cost_type:
+                    table = settings[cost_type]
+                    seed = 'bdt_pad_id'
                 else:
                     table = settings[cost_type]
                     seed = 'bdt_{0}_id'.format(cost_type)
