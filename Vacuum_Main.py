@@ -71,11 +71,12 @@ def process_updates(files):
                             myobj.process()
 
                 elif folder_name == '02_Seeds':
-                    myobj = Seeds(parsed, folder_name)
+                    myobj = Seeds(folder_name, parsed)
                     myobj.dispute()
 
                 elif folder_name == '03_Non-Seeds':
-                    NonSeeds(parsed, folder_name, upload_date)
+                    myobj = NonSeeds(parsed, folder_name)
+                    myobj.dispute()
 
                 elif folder_name == '04_Dispute-Actions':
                     for action in settings['Dispute_Actions-Action']:
