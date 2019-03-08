@@ -192,7 +192,7 @@ def load_settings():
 
     mysettings['UpdatesDir'] = updatesdir
 
-    xmlobj = XMLParseClass(mysettings['SourceCodeDir'] + "\\Vacuum_Settings.xml")
+    xmlobj = XMLParseClass(mysettings['SourceDir'] + "\\Vacuum_Settings.xml")
 
     if xmlobj:
         mysettings = xmlobj.parsexml('./Settings/Network/', mysettings)
