@@ -172,7 +172,7 @@ class NonSeeds:
                 select
                     DSB.DSB_ID,
                     A.Dispute_Category,
-                    A.Dispute_Status,
+                    isnull(A.Dispute_Status,'Filed'),
                     cast(getdate() as date),
                     A.ILEC_Confirmation,
                     A.ILEC_Comment,

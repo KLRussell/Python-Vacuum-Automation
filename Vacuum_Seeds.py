@@ -36,7 +36,7 @@ class Seeds:
                 , getdate(), 'GRT Email: ' + format(getdate(),'yyyyMMdd')'''
             self.args['DH_Whr'] = "A.Claim_Channel = 'Email'"
         else:
-            self.args['email'] = "A.Dispute_Type = 'Email'"
+            self.args['email'] = "A.Dispute_Status = 'Filed'"
             self.args['DSB_Cols'] = 'USI, STC_Claim_Number, Dispute_Amount'
             self.args['DSB_Sel'] = '''USI, '{0}_' + left(Record_Type,1) + cast(Cost_Type_Seed as varchar), dispute_amt
             '''.format(getbatch())
@@ -59,7 +59,7 @@ class Seeds:
             self.args['DH_Sel'] = '''DSB.DSB_ID, A.Dispute_Category, A.Dispute_Status, getdate()
                 , A.Dispute_Reason, A.ILEC_Confirmation, A.ILEC_Comment, A.Approved_Amt, A.Received_Amt
                 , A.Received_Invoice_Date, B.Full_Name, getdate(), 'GRT Email: ' + format(getdate(),'yyyyMMdd')'''
-            self.args['DH_Whr'] = "A.Dispute_Type = 'Email'"
+            self.args['DH_Whr'] = "A.Dispute_Type = 'Email' and A.Dispute_Status is null"
 
             cols = '''dispute_type, cost_type, cost_type_seed, dispute_category, audit_type, confidence, dispute_reason
                             , record_type, usi, dispute_amt, usoc, usoc_desc, pon, phrase_code, causing_so, clli
