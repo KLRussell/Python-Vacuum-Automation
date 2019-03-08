@@ -63,11 +63,11 @@ class Seeds:
                 , A.Received_Invoice_Date, B.Full_Name, getdate(), 'GRT Email: ' + format(getdate(),'yyyyMMdd')'''
             self.args['DH_Whr'] = "A.Dispute_Type = 'Email' and A.Dispute_Status is null"
 
-            self.df = defaultheader(self.df, '''dispute_type, cost_type, cost_type_seed, dispute_category, audit_type, confidence, dispute_reason
-                            , record_type, usi, dispute_amt, usoc, usoc_desc, pon, phrase_code, causing_so, clli
-                            , usage_rate, mou, jurisdiction, short_paid, comment, dispute_status, ilec_confirmation
-                            , ilec_comment, approved_amt, received_amt, received_invoice_date, Error_Columns
-                            , Error_Message''')
+            self.df = defaultheader(self.df, '''dispute_type, cost_type, cost_type_seed, dispute_category, audit_type
+                , confidence, dispute_reason, record_type, usi, dispute_amt, usoc, usoc_desc, pon, phrase_code
+                , causing_so, clli, usage_rate, mou, jurisdiction, short_paid, comment, dispute_status
+                , ilec_confirmation, ilec_comment, approved_amt, received_amt, received_invoice_date, Error_Columns
+                , Error_Message''')
 
     def appenddisputes(self):
         if self.asql.query("select object_id('myseeds')").iloc[0, 0]:
