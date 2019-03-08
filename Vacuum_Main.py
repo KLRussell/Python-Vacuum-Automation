@@ -80,7 +80,8 @@ def process_updates(files):
 
                 elif folder_name == '04_Dispute-Actions':
                     for action in settings['Dispute_Actions-Action']:
-                        DisputeActions(action, parsed.loc[parsed['Action'] == action], folder_name, upload_date)
+                        myobj = DisputeActions(action, parsed.loc[parsed['Action'] == action], folder_name)
+                        myobj.process()
                 del parsed
             del xmlobj
         del upload_date, folder_name

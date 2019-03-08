@@ -4,8 +4,10 @@ from Vacuum_Global import SQLConnect
 
 class DisputeActions:
 
-    def __init__(self, action, df, folder_name, upload_date):
+    def __init__(self, action, df, folder_name):
         self.action = action
         self.df = df
         self.folder_name = folder_name
-        self.upload_date = upload_date
+
+    def process(self):
+        
