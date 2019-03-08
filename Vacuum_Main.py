@@ -71,7 +71,7 @@ def process_updates(files):
                             myobj.process()
 
                 elif folder_name == '02_Seeds':
-                    myobj = Seeds(folder_name, parsed)
+                    myobj = Seeds(folder_name, None, parsed)
                     myobj.dispute()
 
                 elif folder_name == '03_Non-Seeds':
@@ -80,8 +80,11 @@ def process_updates(files):
 
                 elif folder_name == '04_Dispute-Actions':
                     for action in settings['Dispute_Actions-Action']:
-                        myobj = DisputeActions(action, parsed.loc[parsed['Action'] == action], folder_name)
-                        myobj.process()
+                        df = parsed.loc[parsed['Action'] == action]
+
+                        if not df.empty:
+                            myobj = DisputeActions(action, df, folder_name)
+                            myobj.process()
                 del parsed
             del xmlobj
         del upload_date, folder_name
