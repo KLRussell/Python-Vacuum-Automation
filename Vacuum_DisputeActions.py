@@ -3,6 +3,7 @@ from Vacuum_Global import SQLConnect
 from Vacuum_Global import validatecol
 from Vacuum_Global import processresults
 from Vacuum_Global import writelog
+from Vacuum_Global import defaultheader
 
 
 class DisputeActions:
@@ -13,13 +14,8 @@ class DisputeActions:
         self.df = df
         self.folder_name = folder_name
 
-        cols = '''dispute_id, action, amount, credit_invoice_date, action_norm_reason, action_reason, assign_rep
-            , note_tag, attachment, ilec_confirmation, error_columns, error_message
-                    '''.replace(chr(10), '').replace(chr(32), '').split(',')
-
-        for col in cols:
-            if col not in self.df.columns.str.lower():
-                self.df[col] = None
+        self.df = defaultheader(self.df, '''dispute_id, action, amount, credit_invoice_date, action_norm_reason
+            , action_reason, assign_rep, note_tag, attachment, ilec_confirmation, error_columns, error_message''')
 
     def escalate(self):
 

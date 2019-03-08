@@ -223,6 +223,7 @@ class NonSeeds:
 
     def dispute(self):
         writelog("Processing {0} New Non-Seed Disputes".format(len(self.df)), 'info')
+
         self.asql = SQLConnect('alch')
         self.asql.connect()
         self.asql.upload(self.df, 'mydisputes')
