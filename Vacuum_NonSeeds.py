@@ -4,44 +4,43 @@ from Vacuum_Global import getbatch
 from Vacuum_Global import validatecol
 from Vacuum_Global import processresults
 from Vacuum_Global import writelog
+from Vacuum_Global import defaultheader
 
 import random
 
 
 class NonSeeds:
+    asql = None
+
     def __init__(self, df, folder_name):
         self.df = df
         self.folder_name = folder_name
-
-        cols = '''dispute_type, record_type, ban, bill_date, billed_amt, dispute_amt, dispute_category, audit_type
+        self.df = defaultheader(self.df, '''dispute_type, record_type, ban, bill_date, billed_amt, dispute_amt, dispute_category, audit_type
             , confidence, dispute_reason, usi, state, usoc, usoc_desc, pon, phrase_code, causing_so, clli
             , usage_rate, mou, jurisdiction, short_paid, comment, dispute_status, ilec_confirmation, ilec_comment
             , approved_amt, received_amt, received_invoice_date, Error_Columns, Error_Message
-            '''.replace(chr(10), '').replace(chr(32), '').split(',')
+            ''')
 
-        for col in cols:
-            if col not in self.df.columns.str.lower():
-                self.df[col] = None
+        self.df['stc_claim_number'] = \
+            map(lambda stc_claim_number, row: "{0}_X{1}".format(getbatch(), random.randint(10000000, 10000000000))
+                , self.df['stc_claim_number'])
+    # df['stc_claim_number'] = "{0}_X{1}".format(getbatch(), random.randint(10000000, 10000000000))
 
-        df['stc_claim_number'] = "{0}_X{1}".format(getbatch(), random.randint(10000000, 10000000000))
+    def appenddisputes(self):
+        if self.asql.query("select object_id('mydisputes')").iloc[0, 0]:
+            if self.asql.query("select object_id('DS')").iloc[0, 0]:
+                self.asql.execute("DROP TABLE DS")
 
-    @staticmethod
-    def appenddisputes(asql):
-        if asql.query("select object_id('mydisputes')").iloc[0, 0]:
-            # writelog("Disputing {} cost".format(source), 'info')
-            if asql.query("select object_id('DS')").iloc[0, 0]:
-                asql.execute("DROP TABLE DS")
+            if self.asql.query("select object_id('DSB')").iloc[0, 0]:
+                self.asql.execute("DROP TABLE DSB")
 
-            if asql.query("select object_id('DSB')").iloc[0, 0]:
-                asql.execute("DROP TABLE DSB")
+            if self.asql.query("select object_id('DH')").iloc[0, 0]:
+                self.asql.execute("DROP TABLE DH")
 
-            if asql.query("select object_id('DH')").iloc[0, 0]:
-                asql.execute("DROP TABLE DH")
-
-            asql.execute("CREATE TABLE DSB (DSB_ID int, Stc_Claim_Number varchar(255))")
-            asql.execute("CREATE TABLE DS (DS_ID int, DSB_ID int)")
-            asql.execute("CREATE TABLE DH (DH_ID int, DSB_ID int)")
-            asql.execute('''
+            self.asql.execute("CREATE TABLE DSB (DSB_ID int, Stc_Claim_Number varchar(255))")
+            self.asql.execute("CREATE TABLE DS (DS_ID int, DSB_ID int)")
+            self.asql.execute("CREATE TABLE DH (DH_ID int, DSB_ID int)")
+            self.asql.execute('''
                 insert into {0}
                 (
                     BAN,
@@ -70,7 +69,7 @@ class NonSeeds:
                     Error_Columns is null;
             '''.format(settings['Dispute_Staging_Bridge']))
 
-            asql.execute('''
+            self.asql.execute('''
                 insert into {0}
                 (
                     DSB_ID,
@@ -145,7 +144,7 @@ class NonSeeds:
                     A.Error_Columns is null
             '''.format(settings['DisputeStaging'], settings['CAT_Emp'], getbatch(True)))
 
-            asql.execute('''
+            self.asql.execute('''
                 insert into {0}
                 (
                     DSB_ID,
@@ -198,7 +197,7 @@ class NonSeeds:
                     A.Dispute_Type = 'Email'
             '''.format(settings['Dispute_History'], settings['CAT_Emp']))
 
-            asql.execute('''
+            self.asql.execute('''
                 insert into {0}
                 (
                     DS_ID,
@@ -221,21 +220,21 @@ class NonSeeds:
                     DSB.DSB_ID = DH.DSB_ID
             '''.format(settings['Dispute_Fact']))
 
-            asql.execute('drop table DS, DSB, DH')
+            self.asql.execute('drop table DS, DSB, DH')
 
     def dispute(self):
         writelog("Processing {0} New Non-Seed Disputes".format(len(self.df)), 'info')
-        asql = SQLConnect('alch')
-        asql.connect()
-        asql.upload(self.df, 'mydisputes')
+        self.asql = SQLConnect('alch')
+        self.asql.connect()
+        self.asql.upload(self.df, 'mydisputes')
 
-        validatecol(asql, 'mydisputes', 'Bill_Date', True, True)
-        validatecol(asql, 'mydisputes', 'Billed_Amt')
-        validatecol(asql, 'mydisputes', 'Dispute_Amt')
-        validatecol(asql, 'mydisputes', 'Approved_Amt')
-        validatecol(asql, 'mydisputes', 'Received_Amt')
-        validatecol(asql, 'mydisputes', 'Received_Invoice_Date', True)
+        validatecol(self.asql, 'mydisputes', 'Bill_Date', True, True)
+        validatecol(self.asql, 'mydisputes', 'Billed_Amt')
+        validatecol(self.asql, 'mydisputes', 'Dispute_Amt')
+        validatecol(self.asql, 'mydisputes', 'Approved_Amt')
+        validatecol(self.asql, 'mydisputes', 'Received_Amt')
+        validatecol(self.asql, 'mydisputes', 'Received_Invoice_Date', True)
 
-        self.appenddisputes(asql)
-        processresults(self.folder_name, asql, 'mydisputes', 'New Non-Seed Disputes')
-        asql.close()
+        self.appenddisputes()
+        processresults(self.folder_name, self.asql, 'mydisputes', 'New Non-Seed Disputes')
+        self.asql.close()

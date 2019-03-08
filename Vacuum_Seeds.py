@@ -4,6 +4,7 @@ from Vacuum_Global import getbatch
 from Vacuum_Global import validatecol
 from Vacuum_Global import processresults
 from Vacuum_Global import writelog
+from Vacuum_Global import defaultheader
 
 import pandas as pd
 
@@ -11,10 +12,11 @@ import pandas as pd
 class Seeds:
     args = dict()
 
-    def __init__(self, folder_name, df=pd.DataFrame()):
+    def __init__(self, folder_name, asql=None, df=pd.DataFrame()):
         self.folder_name = folder_name
         self.df = df
         self.setdefaults()
+        self.asql = asql
 
     def setdefaults(self):
         if self.df.empty:
@@ -61,32 +63,28 @@ class Seeds:
                 , A.Received_Invoice_Date, B.Full_Name, getdate(), 'GRT Email: ' + format(getdate(),'yyyyMMdd')'''
             self.args['DH_Whr'] = "A.Dispute_Type = 'Email' and A.Dispute_Status is null"
 
-            cols = '''dispute_type, cost_type, cost_type_seed, dispute_category, audit_type, confidence, dispute_reason
+            self.df = defaultheader(self.df, '''dispute_type, cost_type, cost_type_seed, dispute_category, audit_type, confidence, dispute_reason
                             , record_type, usi, dispute_amt, usoc, usoc_desc, pon, phrase_code, causing_so, clli
                             , usage_rate, mou, jurisdiction, short_paid, comment, dispute_status, ilec_confirmation
                             , ilec_comment, approved_amt, received_amt, received_invoice_date, Error_Columns
-                            , Error_Message'''.replace(chr(10), '').replace(chr(32), '').split(',')
+                            , Error_Message''')
 
-            for col in cols:
-                if col not in self.df.columns.str.lower():
-                    self.df[col] = None
+    def appenddisputes(self):
+        if self.asql.query("select object_id('myseeds')").iloc[0, 0]:
+            if self.asql.query("select object_id('DS')").iloc[0, 0]:
+                self.asql.execute("DROP TABLE DS")
 
-    def appenddisputes(self, asql):
-        if asql.query("select object_id('myseeds')").iloc[0, 0]:
-            if asql.query("select object_id('DS')").iloc[0, 0]:
-                asql.execute("DROP TABLE DS")
+            if self.asql.query("select object_id('DSB')").iloc[0, 0]:
+                self.asql.execute("DROP TABLE DSB")
 
-            if asql.query("select object_id('DSB')").iloc[0, 0]:
-                asql.execute("DROP TABLE DSB")
+            if self.asql.query("select object_id('DH')").iloc[0, 0]:
+                self.asql.execute("DROP TABLE DH")
 
-            if asql.query("select object_id('DH')").iloc[0, 0]:
-                asql.execute("DROP TABLE DH")
+            self.asql.execute("CREATE TABLE DSB (DSB_ID int, Stc_Claim_Number varchar(255))")
+            self.asql.execute("CREATE TABLE DS (DS_ID int, DSB_ID int)")
+            self.asql.execute("CREATE TABLE DH (DH_ID int, DSB_ID int)")
 
-            asql.execute("CREATE TABLE DSB (DSB_ID int, Stc_Claim_Number varchar(255))")
-            asql.execute("CREATE TABLE DS (DS_ID int, DSB_ID int)")
-            asql.execute("CREATE TABLE DH (DH_ID int, DSB_ID int)")
-
-            asql.execute('''
+            self.asql.execute('''
                 update A
                     set {0}
 
@@ -98,7 +96,7 @@ class Seeds:
                     {1}
             '''.format(self.args['DH_Whr'], self.args['email']))
 
-            asql.execute('''
+            self.asql.execute('''
                 insert into {0}
                 (
                     {1}
@@ -119,7 +117,7 @@ class Seeds:
                     Error_Columns is null;'''.format(settings['Dispute_Staging_Bridge']
                                                      , self.args['DSB_Cols'], self.args['DSB_Sel']))
 
-            asql.execute('''
+            self.asql.execute('''
                 insert into {0}
                 (
                     {2}
@@ -147,7 +145,7 @@ class Seeds:
             '''.format(settings['DisputeStaging'], settings['CAT_Emp'], self.args['DS_Cols']
                        , self.args['DS_Sel'], self.args['DSB_On']))
 
-            asql.execute('''
+            self.asql.execute('''
                 insert into {0}
                 (
                     {2}
@@ -177,7 +175,7 @@ class Seeds:
             '''.format(settings['Dispute_History'], settings['CAT_Emp'], self.args['DH_Cols']
                        , self.args['DH_Sel'], self.args['DSB_On'], self.args['DH_Whr']))
 
-            asql.execute('''
+            self.asql.execute('''
                 insert into {0}
                 (
                     DS_ID,
@@ -200,20 +198,20 @@ class Seeds:
                     DSB.DSB_ID = DH.DSB_ID
             '''.format(settings['Dispute_Fact']))
 
-            asql.execute('drop table DS, DSB, DH')
+            self.asql.execute('drop table DS, DSB, DH')
 
-    def dispute(self, asql=None):
-        if not asql:
-            # NEED TO POPULATE RECORD_TYPE, VALIDATE ERRORS, AND APPEND ERRORS TO VIRTUAL LIST
+    def dispute(self):
+        if not self.asql:
             writelog("Processing {0} New Seed Disputes".format(len(self.df)), 'info')
-            asql = SQLConnect('alch')
-            asql.connect()
-            asql.upload(self.df, 'myseeds')
 
-            validatecol(asql, 'myseeds', 'Dispute_Amt')
-            validatecol(asql, 'myseeds', 'Approved_Amt')
-            validatecol(asql, 'myseeds', 'Received_Amt')
-            validatecol(asql, 'myseeds', 'Received_Invoice_Date', True)
+            self.asql = SQLConnect('alch')
+            self.asql.connect()
+            self.asql.upload(self.df, 'myseeds')
+
+            validatecol(self.asql, 'myseeds', 'Dispute_Amt')
+            validatecol(self.asql, 'myseeds', 'Approved_Amt')
+            validatecol(self.asql, 'myseeds', 'Received_Amt')
+            validatecol(self.asql, 'myseeds', 'Received_Invoice_Date', True)
 
             for cost_type in settings['Seed-Cost_Type'].split(', '):
                 if 'PC-' in cost_type:
@@ -236,7 +234,7 @@ class Seeds:
                 else:
                     record_type = "'{0}'".format(cost_type)
 
-                asql.execute('''
+                self.asql.execute('''
                     update A
                         set
                             A.Error_Columns = iif(B.{1} is null,'Cost_Type, Cost_Type_Seed',NULL),
@@ -254,8 +252,9 @@ class Seeds:
                         A.Cost_Type = '{2}'
                 '''.format(table, seed, cost_type, record_type))
 
-            self.appenddisputes(asql)
-            processresults(self.folder_name, asql, 'myseeds', 'New Seed Disputes')
-            asql.close()
+            self.appenddisputes()
+            processresults(self.folder_name, self.asql, 'myseeds', 'New Seed Disputes')
+
+            self.asql.close()
         else:
-            self.appenddisputes(asql)
+            self.appenddisputes()
