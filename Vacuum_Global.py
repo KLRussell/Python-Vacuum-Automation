@@ -89,7 +89,7 @@ class SQLConnect:
     conn = None
     cursor = None
 
-    def __init__(self,conn_type,dsn=None):
+    def __init__(self, conn_type, dsn=None):
         self.conn_type = conn_type
 
         if conn_type == 'alch':
