@@ -52,6 +52,37 @@ class XMLParseClass:
             return df.applymap(lambda x: x.strip() if isinstance(x, str) else x)
 
 
+class XMLAppendClass:
+    def __init__(self, file):
+        self.file = file
+
+    def write_xml(self, df):
+        with open(self.file, 'w') as xmlFile:
+            xmlFile.write(
+                '<?xml version="1.0" encoding="UTF-8"?>\n'
+            )
+            xmlFile.write('<records>\n')
+
+            xmlFile.write(
+                '\n'.join(df.apply(self.xml_encode, axis=1))
+            )
+
+            xmlFile.write('\n</records>')
+
+    @staticmethod
+    def xml_encode(row):
+        xmlitem = ['  <record>']
+
+        for field in row.index:
+            xmlitem \
+                .append('    <var var_name="{0}">{1}</var>' \
+                        .format(field, row[field]))
+
+        xmlitem.append('  </record>')
+
+        return '\n'.join(xmlitem)
+
+
 class SQLConnect:
     session = False
     engine = None
