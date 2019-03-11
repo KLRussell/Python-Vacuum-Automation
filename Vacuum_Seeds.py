@@ -19,18 +19,34 @@ class Seeds:
         self.asql = asql
 
     def setdefaults(self):
+        self.args['DSB_Cols'] = '''Vendor, Platform, BAN, STC_Claim_Number, Bill_Date, USI, Dispute_Amount
+            , BanMaster_ID, Source_TBL, Source_ID'''
+        self.args['DSB_Sel'] = '''Vendor, Platform, BAN, '{0}_' + left(Record_Type,1) + cast(Seed as varchar)
+            , Bill_Date, USI, Dispute_Amount, BanMaster_ID, Source_TBL, Source_ID'''.format(getbatch())
+        self.args['DSB_On'] = '''
+            DSB.Stc_Claim_Number='{0}_' + left(A.Record_Type,1) + cast(A.Cost_Type_Seed as varchar)
+            '''.format(getbatch())
+
+        self.args['DC_Cols'] = '''DSB_ID, Vendor, Platform, State, BAN, USI, Source_TBL, Source_ID, STC_Claim_Number
+            , #_Of_Escalations, Status, Display_Status, Date_Submitted, Norm_Dispute_Category
+            , Dispute_Category, Audit_Type, Disputer, Comment, Dispute_Amount, Dispute_Reason
+            , Date_Updated, Batch, Edit_Date, Source_File
+        '''
+        self.args['DC_Sel'] = '''DSB.DSB_ID, A.Vendor, A.Platform, A.State, A.BAN, A.USI, A.Source_TBL, A.Source_ID
+            , DSB.STC_Claim_Number, 0, 'Open', case when DH.Display_Status is not null then DH.Display_Status
+            else 'Pending Review' end, getdate(), A.Dispute_Category, A.Dispute_Category, A.Audit_Type, DS.Rep
+            , DS.Comment, A.Dispute_Amt, DS.Dispute_Reason, getdate(), DS.Batch, getdate(), DH.Source_File
+        '''
+
         if self.df.empty:
             self.args['email'] = "A.Source_TBL = 'PCI'"
-            self.args['DSB_Cols'] = 'USI, STC_Claim_Number, Source_TBL, Source_ID'
-            self.args['DSB_Sel'] = '''USI, '{0}_' + left(Record_Type,1) + cast(Seed as varchar), Source_TBL
-                , Source_ID'''.format(getbatch())
-            self.args['DSB_On'] = '''DSB.Stc_Claim_Number='{0}_' + left(A.Record_Type,1) + cast(A.Seed as varchar)
-                '''.format(getbatch())
-            self.args['DS_Cols'] = '''DSB_ID, Rep, STC_Claim_Number, Dispute_Type, Dispute_Category, Audit_Type
-                , Cost_Type, Cost_Type_Seed,  Record_Type, Dispute_Reason, PON, Comment, Confidence, Batch_DT'''
-            self.args['DS_Sel'] = '''DSB.DSB_ID, B.Full_Name, '{0}_' + left(A.Record_Type,1) + cast(A.Seed as varchar)
-                , A.Claim_Channel, 'GRT CNR', 'CNR Audit', A.Cost_Type, A.Seed, A.Record_Type, A.Action_Reason
-                , A.PON, A.Action_Comment, A.Confidence, '{1}'
+            self.args['DS_Cols'] = '''DSB_ID, Rep, Dispute_Type, Cost_Type, Cost_Type_Seed, State, USOC, USOC_Desc
+                , CPID,  Record_Type, Dispute_Category, Audit_Type, STC_Claim_Number, Bill_Date, Billed_Amt
+                , Claimed_Amt, Dispute_Reason, Billed_Phrase_Code, Causing_SO, PON, Comment, Confidence, Batch_DT'''
+            self.args['DS_Sel'] = '''DSB.DSB_ID, B.Full_Name, A.Claim_Channel, A.Cost_Type, A.Seed, A.State, A.USOC
+                , A.USOC_Desc, CPID, A.Record_Type, 'GRT CNR', 'CNR Audit'
+                , '{0}_' + left(A.Record_Type,1) + cast(A.Seed as varchar), A.Bill_Date, A.Billed_Amt, A.Dispute_Amt
+                , A.Action_Reason, A.Phrase_Code, A.Causing_SO, A.PON, A.Action_Comment, A.Confidence, '{1}'
                 '''.format(getbatch(), getbatch(True))
             self.args['DH_Cols'] = '''DSB_ID, Dispute_Category, Display_Status, Date_Submitted, Dispute_Reason
                 , GRT_Update_Rep, Date_Updated, Source_File'''
@@ -38,22 +54,17 @@ class Seeds:
                 , getdate(), 'GRT Email: ' + format(getdate(),'yyyyMMdd')'''
             self.args['DH_Whr'] = "A.Claim_Channel = 'Email'"
         else:
-            self.args['email'] = "A.Dispute_Status = 'Filed'"
-            self.args['DSB_Cols'] = 'USI, STC_Claim_Number, Dispute_Amount'
-            self.args['DSB_Sel'] = '''USI, '{0}_' + left(Record_Type,1) + cast(Cost_Type_Seed as varchar), dispute_amt
-            '''.format(getbatch())
-            self.args['DSB_On'] = '''
-                DSB.Stc_Claim_Number='{0}_' + left(A.Record_Type,1) + cast(A.Cost_Type_Seed as varchar)
-                '''.format(getbatch())
-            self.args['DS_Cols'] = '''DSB_ID, Rep, Dispute_Type, Cost_Type, Cost_Type_Seed, USOC, USOC_Desc
-            , Record_Type, Dispute_Category, Audit_Type, STC_Claim_Number, Claimed_Amt, Dispute_Reason
-            , Billed_Phrase_Code, Causing_SO, PON, CLLI, Usage_Rate, MOU, Jurisdiction, Short_Paid, Comment
-            , Confidence, Batch_DT'''
-            self.args['DS_Sel'] = '''DSB.DSB_ID, B.Full_Name, A.Dispute_Type, A.Cost_Type, A.Cost_Type_Seed, A.USOC
-            , A.USOC_Desc, A.Record_Type, A.Dispute_Category, A.Audit_Type
-            , '{0}_' + left(A.Record_Type,1) + cast(A.Cost_Type_Seed as varchar), A.Dispute_Amt, A.Dispute_Reason
-            , A.Phrase_Code, A.Causing_SO, A.PON, A.CLLI, A.Usage_Rate, A.MOU, A.Jurisdiction, A.Short_Paid
-            , A.Comment, A.Confidence, '{1}'
+            self.args['email'] = "A.Dispute_Status = case when A.Dispute_Status is not null then A.Dispute_Status " \
+                                 "else 'Filed' end"
+            self.args['DS_Cols'] = '''DSB_ID, Rep, Dispute_Type, Cost_Type, Cost_Type_Seed, State, USOC, USOC_Desc
+            , CPID, Record_Type, Dispute_Category, Audit_Type, STC_Claim_Number, Bill_Date, Billed_Amt
+            , Claimed_Amt, Dispute_Reason, Billed_Phrase_Code, Causing_SO, PON, CLLI, Usage_Rate, MOU, Jurisdiction
+            , Short_Paid, Comment, Confidence, Batch_DT'''
+            self.args['DS_Sel'] = '''DSB.DSB_ID, B.Full_Name, A.Dispute_Type, A.Cost_Type, A.Cost_Type_Seed, A.State
+            , A.USOC, A.USOC_Desc, A.CPID, A.Record_Type, A.Dispute_Category, A.Audit_Type
+            , '{0}_' + left(A.Record_Type,1) + cast(A.Cost_Type_Seed as varchar), A.Bill_Date, A.Billed_Amt
+            , A.Dispute_Amt, A.Dispute_Reason, A.Phrase_Code, A.Causing_SO, A.PON, A.CLLI, A.Usage_Rate, A.MOU
+            , A.Jurisdiction, A.Short_Paid, A.Comment, A.Confidence, '{1}'
             '''.format(getbatch(), getbatch(True))
             self.args['DH_Cols'] = '''DSB_ID, Dispute_Category, Display_Status, Date_Submitted, Dispute_Reason
                 , ILEC_Confirmation, ILEC_Comments, Credit_Approved, Credit_Received_Amount
@@ -66,7 +77,8 @@ class Seeds:
             self.df = defaultheader(self.df, '''dispute_type, cost_type, cost_type_seed, dispute_category, audit_type
                 , confidence, dispute_reason, record_type, usi, dispute_amt, usoc, usoc_desc, pon, phrase_code
                 , causing_so, clli, usage_rate, mou, jurisdiction, short_paid, comment, dispute_status
-                , ilec_confirmation, ilec_comment, approved_amt, received_amt, received_invoice_date, Error_Columns
+                , ilec_confirmation, ilec_comment, approved_amt, received_amt, received_invoice_date, vendor, platform
+                , ban, bill_date, state, billed_amt, source_tbl, source_id, cpid, banmaster_id, Error_Columns
                 , Error_Message''')
 
     def appenddisputes(self):
@@ -81,8 +93,10 @@ class Seeds:
                 self.asql.execute("DROP TABLE DH")
 
             self.asql.execute("CREATE TABLE DSB (DSB_ID int, Stc_Claim_Number varchar(255))")
-            self.asql.execute("CREATE TABLE DS (DS_ID int, DSB_ID int)")
-            self.asql.execute("CREATE TABLE DH (DH_ID int, DSB_ID int)")
+            self.asql.execute("CREATE TABLE DS (DS_ID int, DSB_ID int, Rep varchar(100), Comment varchar(max)"
+                              ", Dispute_Reason varchar(max), Batch date)")
+            self.asql.execute("CREATE TABLE DH (DH_ID int, DSB_ID int, Display_Status varchar(100)"
+                              ", Source_File varchar(255))")
 
             self.asql.execute('''
                 update A
@@ -125,7 +139,11 @@ class Seeds:
 
                 OUTPUT
                     INSERTED.DS_ID,
-                    INSERTED.DSB_ID
+                    INSERTED.DSB_ID,
+                    INSERTED.Rep,
+                    INSERTED.Comment,
+                    INSERTED.Dispute_Reason,
+                    INSERTED.Batch
 
                 INTO DS
 
@@ -153,7 +171,9 @@ class Seeds:
 
                 OUTPUT
                     INSERTED.DH_ID,
-                    INSERTED.DSB_ID
+                    INSERTED.DSB_ID,
+                    INSERTED.Display_Status,
+                    INSERTED.Source_File
 
                 INTO DH
 
@@ -178,27 +198,44 @@ class Seeds:
             self.asql.execute('''
                 insert into {0}
                 (
-                    DS_ID,
-                    DSB_ID,
-                    DH_ID,
-                    Open_Dispute
+                    {1}
                 )
                 select
-                    DS.DS_ID,
-                    DS.DSB_ID,
-                    DH.DH_ID,
-                    1
+                    {2}
 
                 from DSB
                 inner join DS
                 on
                     DSB.DSB_ID = DS.DSB_ID
+                inner join myseeds A
+                on
+                    {3}
                 left join DH
                 on
                     DSB.DSB_ID = DH.DSB_ID
-            '''.format(settings['Dispute_Fact']))
+            '''.format(settings['Dispute_Fact'], self.args['DC_Cols'], self.args['DC_Sel'], self.args['DSB_On']))
 
             self.asql.execute('drop table DS, DSB, DH')
+
+    def grabseedinfo(self, table, seed, cost_type, params, params2=''):
+        self.asql.execute('''
+            update A
+                set
+                    A.Error_Columns = iif(B.{1} is null,'Cost_Type, Cost_Type_Seed',NULL),
+                    A.Error_Message = iif(B.{1} is null,'Cost_Type_Seed does not exist',NULL),
+                    {3}
+
+            from myseeds as A
+            left join {0} as B
+            on
+                A.Cost_Type_Seed = B.{1}
+            {4}
+
+            where
+                A.Error_Columns is null
+                    and
+                A.Cost_Type = '{2}'
+        '''.format(table, seed, cost_type, params, params2))
 
     def dispute(self):
         if not self.asql:
@@ -213,48 +250,154 @@ class Seeds:
             validatecol(self.asql, 'myseeds', 'Received_Amt')
             validatecol(self.asql, 'myseeds', 'Received_Invoice_Date', True)
 
-            for cost_type in settings['Seed-Cost_Type'].split(', '):
-                if 'PC-' in cost_type:
-                    table = settings['PaperCost']
-                    seed = 'seed'
-                elif 'LPC' == cost_type:
-                    table = settings[cost_type]
-                    seed = 'bdt_invoice_id'
-                elif 'ADJ' == cost_type:
-                    table = settings[cost_type]
-                    seed = 'bdt_pad_id'
-                else:
-                    table = settings[cost_type]
-                    seed = 'bdt_{0}_id'.format(cost_type)
-
-                if 'PC-' in cost_type:
-                    record_type = cost_type.split('-')[1]
-                elif cost_type == 'OCC':
-                    record_type = 'B.Activity_Type'
-                else:
-                    record_type = "'{0}'".format(cost_type)
-
-                self.asql.execute('''
-                    update A
-                        set
-                            A.Error_Columns = iif(B.{1} is null,'Cost_Type, Cost_Type_Seed',NULL),
-                            A.Error_Message = iif(B.{1} is null,'Cost_Type_Seed does not exist',NULL),
-                            A.Record_Type = {3}
-                            
-                    from myseeds as A
-                    left join {0} as B
+        for cost_type in settings['Seed-Cost_Type'].split(', '):
+            if 'PC-' in cost_type:
+                self.grabseedinfo(settings['PaperCost'], 'seed', cost_type, '''
+                    A.Record_Type='{0}',
+                    A.Vendor=B.Vendor,
+                    A.BAN=B.BAN,
+                    A.Bill_Date=B.Bill_Date,
+                    A.State=B.State,
+                    A.Billed_Amt=B.{0},
+                    A.dispute_amt=isnull(A.dispute_amt,B.{0}),
+                    A.USI=CASE
+                        WHEN B.WTN is not null THEN B.WTN
+                        WHEN B.Circuit_ID is not null THEN B.Circuit_ID
+                        WHEN B.BTN is not null THEN B.BTN
+                    END,
+                    A.Source_TBL=isnull(A.Source_TBL, 'PCI'),
+                    A.Source_ID=isnull(A.Source_ID, B.PCI_ID)
+                '''.format(cost_type.split('-')[1]))
+            elif 'MRC' == cost_type:
+                self.grabseedinfo(settings[cost_type], 'bdt_{0}_id'.format(cost_type), cost_type, '''
+                    A.Record_Type='{0}',
+                    A.Vendor=B.Vendor,
+                    A.Platform=B.Platform,
+                    A.BAN=B.BAN,
+                    A.Bill_Date=B.Bill_Date,
+                    A.State=B.State,
+                    A.USOC=case
+                        when A.USOC then A.USOC
+                        else B.USOC
+                    end,
+                    A.USOC_Desc=case
+                        when A.USOC_Desc is not null then A.USOC_Desc
+                        else B.USOC_Description
+                    end,
+                    A.Billed_Amt=B.Amount,
+                    A.dispute_amt=isnull(A.dispute_amt,B.Amount),
+                    A.Source_TBL=isnull(A.Source_TBL, 'BMI'),
+                    A.Source_ID=isnull(A.Source_ID, B.BMI_ID),
+                    A.USI=CASE
+                        WHEN B.WTN is not null THEN B.WTN
+                        WHEN B.Circuit_ID is not null THEN B.Circuit_ID
+                        WHEN B.BTN is not null THEN B.BTN
+                    END,
+                    A.CPID = C.CPID,
+                    A.BANMaster_ID = C.BANMasterID
+                    '''.format(cost_type), '''
+                    left join {0} As C
                     on
-                        A.Cost_Type_Seed = B.{1}
-                    
-                    where
-                        A.Error_Columns is null
+                        B.BDT_MRC_ID = C.BDT_MRC_ID
                             and
-                        A.Cost_Type = '{2}'
-                '''.format(table, seed, cost_type, record_type))
+                        B.Invoice_Date = C.Invoice_Date
+                      '''.format(settings['MRC_CMP']))
+            elif 'OCC' == cost_type:
+                self.grabseedinfo(settings[cost_type], 'bdt_{0}_id'.format(cost_type), cost_type, '''
+                    A.Record_Type='B.Activity_Type',
+                    A.Vendor=B.Vendor,
+                    A.Platform=B.Platform,
+                    A.BAN=B.BAN,
+                    A.Bill_Date=B.Bill_Date,
+                    A.State=B.State,
+                    A.USOC=case
+                        when A.USOC then A.USOC
+                        else B.USOC
+                    end,
+                    A.USOC_Desc=case
+                        when A.USOC_Desc is not null then A.USOC_Desc
+                        else B.USOC_Description
+                    end,
+                    A.Billed_Amt=B.Amount,
+                    A.dispute_amt=isnull(A.dispute_amt, B.Amount),
+                    A.Phrase_Code=case
+                        when A.Phrase_Cose is not null then A.Phrase_Code
+                        else B.Phrase_Code
+                    end,
+                    A.Causing_SO=case
+                        when A.Causing_SO is not null then A.Causing_SO
+                        else B.SO
+                    end,
+                    A.PON=case
+                        when A.PON is not null then A.PON
+                        else B.PON
+                    end
+                ''')
+            elif 'TAS' == cost_type:
+                self.grabseedinfo(settings[cost_type], 'bdt_{0}_id'.format(cost_type), cost_type, '''
+                    A.Record_Type='{0}',
+                    A.Vendor=B.Vendor,
+                    A.Platform=B.Platform,
+                    A.BAN=B.BAN,
+                    A.Bill_Date=B.Bill_Date,
+                    A.State=B.State,
+                    A.Billed_Amt=B.Total_Amount,
+                    A.dispute_amt=isnull(A.dispute_amt, B.Total_Amount),
+                    A.Jurisdiction=case
+                        when A.Jurisdiction is not null then A.Jurisdiction
+                        else B.Jurisdiction_Phrase
+                    end
+                '''.format(cost_type))
+            elif 'USAGE' == cost_type:
+                self.grabseedinfo(settings[cost_type], 'bdt_{0}_id'.format(cost_type), cost_type, '''
+                    A.Record_Type='{0}',
+                    A.Vendor=B.Vendor,
+                    A.Platform=B.Platform,
+                    A.BAN=B.BAN,
+                    A.Bill_Date=B.Bill_Date,
+                    A.State=B.State,
+                    A.Billed_Amt=B.Amount,
+                    A.dispute_amt=isnull(A.dispute_amt,B.Amount),
+                    A.USI=case when A.USI is not null then A.USE else B.BTN end,
+                    A.Usage_Rate=case
+                        when A.Usage_Rate is not null then A.Usage_Rate
+                        else B.Usage_Rate
+                    end,
+                    A.Jurisdiction=case
+                        when A.Jurisdiction is not null then A.Jurisdiction
+                        else B.Jurisdiction
+                    end
+                '''.format(cost_type))
+            elif 'LPC' == cost_type:
+                self.grabseedinfo(settings[cost_type], 'bdt_invoice_id', cost_type, '''
+                    A.Record_Type='{0}',
+                    A.Vendor=B.Vendor,
+                    A.Platform=B.Platform,
+                    A.BAN=B.BAN,
+                    A.Bill_Date=B.Bill_Date,
+                    A.State=B.State,
+                    A.Billed_Amt=B.Late_Payment_Charges,
+                    A.dispute_amt=isnull(A.dispute_amt,B.Late_Payment_Charges)
+                '''.format(cost_type))
+            elif 'ADJ' == cost_type:
+                self.grabseedinfo(settings[cost_type], 'bdt_pad_id', cost_type, '''
+                    A.Record_Type='{0}',
+                    A.Vendor=B.Vendor,
+                    A.Platform=B.Platform,
+                    A.BAN=B.BAN,
+                    A.Bill_Date=B.Bill_Date,
+                    A.State=B.State,
+                    A.Billed_Amt=B.Amount,
+                    A.dispute_amt=isnull(A.dispute_amt,B.Amount),
+                    A.Phrase_Code=case
+                        when A.Phrase_Cose is not null then A.Phrase_Code
+                        else B.Phrase_Code
+                    end
+                '''.format(cost_type))
 
-            self.appenddisputes()
-            processresults(self.folder_name, self.asql, 'myseeds', 'New Seed Disputes')
+        self.appenddisputes()
+        processresults(self.folder_name, self.asql, 'myseeds', 'New Seed Disputes')
 
+        if not self.asql:
             self.asql.close()
-        else:
-            self.appenddisputes()
+

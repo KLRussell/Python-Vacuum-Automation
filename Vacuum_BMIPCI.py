@@ -21,8 +21,9 @@ class BMIPCI:
         self.folder_name = folder_name
         self.df = defaultheader(self.df, '''action, gs_srvtype, gs_srvid, action_comment, action_norm_reason
             , action_reason, usi, start_date, claim_channel, confidence, pon, macnum, audit_group, prov_category
-            , prov_recommendation, prov_norm_reason, prov_sub_reason, amount_or_days, credit_invoice_date
-            , error_columns, error_message''')
+            , prov_recommendation, prov_norm_reason, prov_sub_reason, amount_or_days, credit_invoice_date, vendor
+            , platform, ban, bill_date, state, billed_amt, dispute_amt, usoc, usoc_desc, cpid, banmaster_id
+            , phrase_code, causing_so, error_columns, error_message''')
 
     def update_map(self, source_tbl, bmb_tbl, bmm_tbl, unmapped_tbl):
             param = None
