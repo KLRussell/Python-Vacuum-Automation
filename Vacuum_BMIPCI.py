@@ -6,6 +6,7 @@ from Vacuum_Global import processresults
 from Vacuum_Global import validatecol
 from Vacuum_Seeds import Seeds
 from Vacuum_Global import defaultheader
+from Vacuum_DisputeActions import DisputeActions
 
 import os
 import time
@@ -430,9 +431,6 @@ class BMIPCI:
                 )
 
             if self.asql.query("select object_id('myseeds')").iloc[0, 0]:
-                self.updatezerorev('BMI', 'Dispute Review', 'Action_Comment', True, 'New Dispute')
-                self.updatezerorev('PCI', 'Dispute Review', 'Action_Comment', True, 'New Dispute')
-
                 self.asql.execute('''
                     with
                         MY_TMP
@@ -460,8 +458,15 @@ class BMIPCI:
                     where
                         B.Source_TBL is null''')
 
+                self.updatezerorev('BMI', 'Dispute Review', 'Action_Comment', True, 'New Dispute')
+                self.updatezerorev('PCI', 'Dispute Review', 'Action_Comment', True, 'New Dispute')
+
                 myobj = Seeds(self.folder_name, self.asql)
                 myobj.dispute()
+
+                self.asql.execute("DROP TABLE myseeds")
+
+                del myobj
             else:
                 writelog("Warning! No cost found for {} of spreadsheet".format(source), 'info')
 
@@ -714,27 +719,18 @@ class BMIPCI:
             inner join {1} As C
             on
                 B.DSB_ID = C.DSB_ID
+            
+            where
+                B.Status = 'Open'
                     and
-                C.Open_Dispute = 1
-            inner join {2} As D
-            on
-                C.DS_ID = D.DS_ID
+                B.Dispute_Category = 'GRT CNR'
                     and
-                D.Dispute_Category = 'GRT CNR'
-            inner join {3} As E
-            on
-                C.DH_ID = E.DH_ID
-            inner join {4} As F
-            on
-                E.DH_ID = F.DH_ID
-                    and
-                cast(F.Edit_Date as date) = cast(getdate() as date)
-            '''.format(settings['Dispute_Staging_Bridge'], settings['Dispute_Fact'], settings['DisputeStaging'],
-                       settings['Dispute_History'], settings['Dispute_Notes']))
+                cast(C.Edit_Date as date) = cast(getdate() as date)
+            '''.format(settings['Dispute_Current'], settings['Dispute_Notes']))
 
         self.asql.upload(self.asql.query('''
             select
-                F.DH_ID,
+                C.DSB_ID,
                 B.Full_Name,
                 A.Action_Norm_Reason,
                 A.Action_Reason,
@@ -750,48 +746,16 @@ class BMIPCI:
                 A.Source_TBL = C.Source_TBL
                     and
                 A.Source_ID = C.Source_ID
-            inner join {2} As D
-            on
-                C.DSB_ID = D.DSB_ID
-                    and
-                D.Open_Dispute = 1
-            inner join {3} As E
-            on
-                D.DS_ID = E.DS_ID
-                    and
-                E.Dispute_Category = 'GRT CNR'
-            inner join {4} As F
-            on
-                D.DH_ID = F.DH_ID
 
             where
+                C.Status = 'Open'
+                    and
+                C.Dispute_Category = 'GRT CNR'
+                    and
                 A.Error_Columns is null
-        '''.format(settings['CAT_Emp'], settings['Dispute_Staging_Bridge'],
-                   settings['Dispute_Fact'], settings['DisputeStaging'], settings['Dispute_History'])), 'mytbl2')
+        '''.format(settings['CAT_Emp'], settings['Dispute_Current'])), 'mydisputes')
 
-        # migrate section to Vacuum_DisputeActions
-        if not self.asql.query("select object_id('mytbl2')").iloc[0, 0]:
-            self.asql.execute('''
-                insert into {0}
-                (
-                    DH_ID,
-                    Logged_By,
-                    Norm_Note_Action,
-                    Dispute_Note,
-                    Days_Till_Action,
-                    Edit_Date
-                )
-                select
-                    DH_ID,
-                    Full_Name,
-                    Action_Norm_Reason,
-                    Action_Reason,
-                    Amount_Or_Days,
-                    Edit_Date
-    
-                from mytbl
-            '''.format(settings['Dispute_Notes']))
-
+        if not self.asql.query("select object_id('mydisputes')").iloc[0, 0]:
             self.asql.execute('''
                 WITH
                     MYTMP
@@ -800,33 +764,37 @@ class BMIPCI:
                     SELECT DISTINCT
                         Source_TBL,
                         Source_ID
-
-                    FROM mytbl2
+    
+                    FROM mydisputes
                 )
-
+    
                 update A
                     set
                         A.Error_Columns = 'Source_TBL, Source_ID',
                         A.Error_Message = 'There are no open STC filed GRT CNR disputes for this Source_TBL & Source_ID combo'
-
+    
                 FROM mytbl As A
-                LEFT JOIN mytbl2 As B
+                LEFT JOIN MYTMP As B
                 ON
                     A.Source_TBL = B.Source_TBL
                         AND
                     A.Source_ID = B.Source_ID
-
+    
                 WHERE
                     A.Source_TBL is null
                         and
                     A.Error_Columns is null
             ''')
-            # migrate section to Vacuum_DisputeActions END
+
+            myobj = DisputeActions('Dispute Note', self.folder_name, self.asql)
+            myobj.process()
 
             self.updatezerorev('BMI', 'Dispute Review', 'Action_Reason', False, 'Dispute Note')
             self.updatezerorev('PCI', 'Dispute Review', 'Action_Reason', False, 'Dispute Note')
 
-            self.asql.execute("drop table mytbl2")
+            self.asql.execute("drop table mydisputes")
+
+            del myobj
         else:
             self.asql.execute('''
                 update A
@@ -850,10 +818,7 @@ class BMIPCI:
         self.asql.upload(self.asql.query('''
             select
                 A.*,
-                E.DSB_ID,
-                E.Dispute_Category,
-                B.Dispute_Amount,
-                E.STC_Index
+                E.DSB_ID
 
             from mytbl As A
             inner join {0} As B
@@ -861,85 +826,19 @@ class BMIPCI:
                 A.Source_TBL = B.Source_TBL
                     and
                 A.Source_ID = B.Source_ID
-            inner join {1} As C
-            on
-                B.DSB_ID = C.DSB_ID
-                    and
-                C.Open_Dispute = 1
-            inner join {2} As D
-            on
-                C.DS_ID = D.DS_ID
-                    and
-                D.Dispute_Category = 'GRT CNR'
-            inner join {3} As E
-            on
-                C.DH_ID = E.DH_ID
-            
             where
-                D.Dispute_Type = 'Email'
-                    or
-                E.Display_Status = 'Denied - Pending'
-        '''.format(settings['Dispute_Staging_Bridge'], settings['Dispute_Fact'], settings['DisputeStaging'],
-                   settings['Dispute_History'])), 'mytbl2')
-
-        # migrate section to Vacuum_DisputeActions
-        if not self.asql.query("select object_id('mytbl2')").iloc[0, 0]:
-            self.asql.execute("CREATE TABLE DH (DH_ID int, DSB_ID int)")
-
-            self.asql.execute('''
-                INSERT INTO {0}
+                B.Status = 'Open'
+                    and
+                B.Dispute_Category = 'GRT CNR'
+                    and
                 (
-                    DSB_ID,
-                    Dispute_Category,
-                    Display_Status,
-                    Date_Submitted,
-                    Escalate,
-                    Escalate_DT,
-                    Escalate_Amount,
-                    Dispute_Reason,
-                    STC_Index,
-                    GRT_Update_Rep,
-                    Date_Updated,
-                    Source_File
+                    B.Dispute_Type = 'Email'
+                        or
+                    B.Display_Status = 'Denied - Pending'
                 )
-                
-                OUTPUT
-                    INSERTED.DH_ID,
-                    INSERTED.DSB_ID
-                
-                INTO DH
-                
-                SELECT
-                    A.DSB_ID,
-                    A.Dispute_Category,
-                    'GRT Escalate',
-                    cast(getdate() as date),
-                    1,
-                    cast(getdate() as date),
-                    A.Dispute_Amount,
-                    A.Action_Reason,
-                    A.STC_Index,
-                    B.Full_Name,
-                    getdate(),
-                    'GRT Status: {2}'
-                
-                FROM mytbl2 As A
-                INNER JOIN {1} As B
-                ON
-                    A.Comp_Serial = B.Comp_Serial
-            '''.format(settings['Dispute_History'], settings['CAT_Emp'], getbatch()))
+        '''.format(settings['DisputeCurrent'])), 'mydisputes')
 
-            self.asql.execute('''
-                UPDATE A
-                SET
-                    A.DH_ID = B.DH_ID
-                
-                FROM {0} As A
-                INNER JOIN DH As B
-                ON
-                    A.DSB_ID = B.DSB_ID
-            '''.format(settings['Dispute_Fact']))
-
+        if not self.asql.query("select object_id('mydisputes')").iloc[0, 0]:
             self.asql.execute('''
                 WITH
                     MYTMP
@@ -949,7 +848,7 @@ class BMIPCI:
                         Source_TBL,
                         Source_ID
                         
-                    FROM mytbl2
+                    FROM mydisputes
                 )
                 
                 update A
@@ -959,7 +858,7 @@ class BMIPCI:
                         'There are no open Denied - Pending GRT CNR disputes for this Source_TBL & Source_ID combo'
                 
                 FROM mytbl As A
-                LEFT JOIN mytbl2 As B
+                LEFT JOIN MYTMP As B
                 ON
                     A.Source_TBL = B.Source_TBL
                         AND
@@ -970,19 +869,23 @@ class BMIPCI:
                         and
                     A.Error_Columns is null
             ''')
-            # migrate section to Vacuum_DisputeActions END
+
+            myobj = DisputeActions('Escalate', self.folder_name, self.asql)
+            myobj.process()
 
             self.updatezerorev('BMI', 'Dispute Review', 'Action_Reason', False, 'GRT Escalate')
             self.updatezerorev('PCI', 'Dispute Review', 'Action_Reason', False, 'GRT Escalate')
 
-            self.asql.execute("drop table mytbl2, DH")
+            self.asql.execute("drop table mydisputes")
+
+            del myobj
         else:
             self.asql.execute('''
                 update A
                     set
                         A.Error_Columns = 'Source_TBL, Source_ID',
                         A.Error_Message = 
-                        'There are no open Denied - Pending GRT CNR disputes for this Source_TBL & Source_ID combo'
+                    'There are no open Denied - Pending/Email GRT CNR disputes for this Source_TBL & Source_ID combo'
                 
                 FROM mytbl
                 
@@ -1003,19 +906,7 @@ class BMIPCI:
         self.asql.upload(self.asql.query('''
             select
                 A.*,
-                E.DSB_ID,
-                E.Dispute_Category,
-                E.Date_Submitted,
-                E.ILEC_Confirmation,
-                E.ILEC_Comments,
-                E.Credit_Approved,
-                E.Denied,
-                E.Escalate,
-                E.Escalate_DT,
-                E.Escalate_Amount,
-                E.Dispute_Reason,
-                E.STC_Index,
-                E.Resolution_Date
+                E.DSB_ID
 
             from mytbl As A
             inner join {0} As B
@@ -1023,107 +914,21 @@ class BMIPCI:
                 A.Source_TBL = B.Source_TBL
                     and
                 A.Source_ID = B.Source_ID
-            inner join {1} As C
-            on
-                B.DSB_ID = C.DSB_ID
-                    and
-                C.Open_Dispute = 1
-            inner join {2} As D
-            on
-                C.DS_ID = D.DS_ID
-                    and
-                D.Dispute_Category = 'GRT CNR'
-            inner join {3} As E
-            on
-                C.DH_ID = E.DH_ID
-                
+                            
             where
-                (
-                    (
-                        D.Dispute_Type in ('GRT','STC')
-                            and
-                        E.Display_Status in ('Denied - Pending', 'Approved', 'Partial Approved')
-                    )
-                        or
-                    D.Dispute_Type = 'Email'
-                )
-                    and
                 A.Error_Columns is null
-        '''.format(settings['Dispute_Staging_Bridge'], settings['Dispute_Fact'], settings['DisputeStaging'],
-                   settings['Dispute_History'])), 'mytbl2')
-
-        # migrate section to Vacuum_DisputeActions
-        if not self.asql.query("select object_id('mytbl2')").iloc[0, 0]:
-            self.asql.execute("CREATE TABLE DH (DH_ID int, DSB_ID int)")
-
-            self.asql.execute('''
-                INSERT INTO {0}
+                    and
+                B.Status = 'Open'
+                    and
+                B.Dispute_Category = 'GRT CNR'
+                    and
                 (
-                    DSB_ID,
-                    Dispute_Category,
-                    Display_Status,
-                    Date_Submitted,
-                    ILEC_Confirmation,
-                    ILEC_Comments,
-                    Credit_Approved,
-                    Denied,
-                    Credit_Received_Amount,
-                    Credit_Received_Invoice_Date,
-                    Escalate,
-                    Escalate_DT,
-                    Escalate_Amount,
-                    Dispute_Reason,
-                    STC_Index,
-                    GRT_Update_Rep,
-                    Resolution_Date,
-                    Date_Updated,
-                    Source_File
-                )
-                OUTPUT
-                    INSERTED.DH_ID,
-                    INSERTED.DSB_ID
-                
-                INTO DH
-                
-                SELECT
-                    A.DSB_ID,
-                    A.Dispute_Category,
-                    'Paid',
-                    cast(getdate() as date),
-                    A.ILEC_Confirmation,
-                    A.ILEC_Comments,
-                    A.Credit_Approved,
-                    A.Denied,
-                    A.Amount_Or_Days,
-                    A.Credit_Invoice_Date,
-                    A.Escalate,
-                    A.Escalate_DT,
-                    A.Escalate_Amount,
-                    A.Dispute_Reason,
-                    A.STC_Index,
-                    B.Full_Name,
-                    A.Resolution_Date,
-                    getdate(),
-                    'GRT Status: {2}'
-                    
-                FROM mytbl2 As A
-                INNER JOIN {1} As B
-                ON
-                    A.Comp_Serial = B.Comp_Serial
-            '''.format(settings['Dispute_History'], settings['CAT_Emp'], getbatch()))
+                    B.Display_Status in ('Denied - Pending', 'Approved', 'Partial Approved')
+                        or
+                    B.Dispute_Type = 'Email'
+                )'''.format(settings['Dispute_Current'])), 'mydisputes')
 
-            self.asql.execute('''
-                UPDATE A
-                SET
-                    A.DH_ID = B.DH_ID,
-                    A.Open_Dispute = 0
-
-                FROM {0} As A
-                INNER JOIN DH As B
-                ON
-                    A.DSB_ID = B.DSB_ID
-            '''.format(settings['Dispute_Fact']))
-
+        if not self.asql.query("select object_id('mydisputes')").iloc[0, 0]:
             self.asql.execute('''
                 WITH
                     MYTMP
@@ -1133,7 +938,7 @@ class BMIPCI:
                         Source_TBL,
                         Source_ID
 
-                    FROM mytbl2
+                    FROM mydisputes
                 )
 
                 UPDATE A
@@ -1143,7 +948,7 @@ class BMIPCI:
                             'There are no open Denied - Pending or Approved GRT CNR disputes for this Source_ID'
 
                 FROM mytbl As A
-                LEFT JOIN mytbl2 As B
+                LEFT JOIN MYTMP As B
                 ON
                     A.Source_TBL = B.Source_TBL
                         AND
@@ -1154,12 +959,16 @@ class BMIPCI:
                         and
                     A.Error_Columns is null
             ''')
-            # migrate section to Vacuum_DisputeActions END
+
+            myobj = DisputeActions('Paid', self.folder_name, self.asql)
+            myobj.process()
 
             self.updatezerorev('BMI', 'Dispute Review', None, False, 'GRT Paid')
             self.updatezerorev('PCI', 'Dispute Review', None, False, 'GRT Paid')
 
-            self.asql.execute("drop table mytbl2, DH")
+            self.asql.execute("drop table mydisputes")
+
+            del myobj
         else:
             self.asql.execute('''
                 UPDATE A
@@ -1170,6 +979,91 @@ class BMIPCI:
 
                 FROM mytbl As A
                 
+                WHERE
+                    A.Error_Columns is null
+            ''')
+
+        processresults(self.folder_name, self.asql, 'mytbl', self.action)
+
+    def addclosed(self):
+        writelog("Validating {0} {1}(s)".format(len(self.df.index), self.action), 'info')
+
+        self.asql.upload(self.df, 'mytbl')
+
+        self.asql.upload(self.asql.query('''
+            select
+                A.*,
+                E.DSB_ID
+
+            from mytbl As A
+            inner join {0} As B
+            on
+                A.Source_TBL = B.Source_TBL
+                    and
+                A.Source_ID = B.Source_ID
+
+            where
+                B.Status = 'Open'
+                    and
+                B.Dispute_Category = 'GRT CNR'
+                    and
+                (
+                    B.Display_Status in ('Denied - Pending')
+                        or
+                    B.Dispute_Type = 'Email'
+                )'''.format(settings['Dispute_Current'])), 'mydisputes')
+
+        if not self.asql.query("select object_id('mydisputes')").iloc[0, 0]:
+            self.asql.execute('''
+                WITH
+                    MYTMP
+                AS
+                (
+                    SELECT DISTINCT
+                        Source_TBL,
+                        Source_ID
+
+                    FROM mydisputes
+                )
+
+                UPDATE A
+                    SET
+                        A.Error_Columns = 'Source_TBL, Source_ID',
+                        A.Error_Message = 
+                            'There are no open Denied - Pending GRT CNR disputes for this Source_ID'
+
+                FROM mytbl As A
+                LEFT JOIN MYTMP As B
+                ON
+                    A.Source_TBL = B.Source_TBL
+                        AND
+                    A.Source_ID = B.Source_ID
+
+                WHERE
+                    A.Source_TBL is null
+                        and
+                    A.Error_Columns is null
+            ''')
+
+            myobj = DisputeActions('Closed', self.folder_name, self.asql)
+            myobj.process()
+
+            self.updatezerorev('BMI', 'Dispute Review', None, False, 'GRT Closed')
+            self.updatezerorev('PCI', 'Dispute Review', None, False, 'GRT Closed')
+
+            self.asql.execute("drop table mydisputes")
+
+            del myobj
+        else:
+            self.asql.execute('''
+                UPDATE A
+                    SET
+                        A.Error_Columns = 'Source_TBL, Source_ID',
+                        A.Error_Message = 
+                            'There are no open Denied - Pending GRT CNR disputes for this Source_ID'
+
+                FROM mytbl As A
+
                 WHERE
                     A.Error_Columns is null
             ''')
@@ -1226,9 +1120,10 @@ class BMIPCI:
             self.adddn()
         elif self.action == 'Escalate Disputes':
             self.addescalate()
-        # Need to add action Closed here and use core elements from Vacuum_DisputeActions
         elif self.action == 'Paid Disputes':
             self.addpaid()
+        elif self.action == 'Close Disputes':
+            self.addclosed()
         elif self.action == 'Send to Audit':
             self.sendtoaudit()
         else:
