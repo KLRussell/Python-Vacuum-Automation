@@ -27,12 +27,12 @@ class Seeds:
             DSB.Stc_Claim_Number='{0}_' + left(A.Record_Type,1) + cast(A.Cost_Type_Seed as varchar)
             '''.format(getbatch())
 
-        self.args['DC_Cols'] = '''DSB_ID, Vendor, Platform, State, BAN, USI, Source_TBL, Source_ID, STC_Claim_Number
+        self.args['DC_Cols'] = '''DSB_ID, Dispute_Type, Vendor, Platform, State, BAN, USI, Source_TBL, Source_ID, STC_Claim_Number
             , #_Of_Escalations, Status, Display_Status, Date_Submitted, Norm_Dispute_Category
             , Dispute_Category, Audit_Type, Disputer, Comment, Dispute_Amount, Dispute_Reason
             , Date_Updated, Batch, Edit_Date, Source_File
         '''
-        self.args['DC_Sel'] = '''DSB.DSB_ID, A.Vendor, A.Platform, A.State, A.BAN, A.USI, A.Source_TBL, A.Source_ID
+        self.args['DC_Sel'] = '''DSB.DSB_ID, DS.Dispute_Type, A.Vendor, A.Platform, A.State, A.BAN, A.USI, A.Source_TBL, A.Source_ID
             , DSB.STC_Claim_Number, 0, 'Open', case when DH.Display_Status is not null then DH.Display_Status
             else 'Pending Review' end, getdate(), A.Dispute_Category, A.Dispute_Category, A.Audit_Type, DS.Rep
             , DS.Comment, A.Dispute_Amt, DS.Dispute_Reason, getdate(), DS.Batch_DT, getdate(), DH.Source_File
@@ -93,8 +93,8 @@ class Seeds:
                 self.asql.execute("DROP TABLE DH")
 
             self.asql.execute("CREATE TABLE DSB (DSB_ID int, Stc_Claim_Number varchar(255))")
-            self.asql.execute("CREATE TABLE DS (DS_ID int, DSB_ID int, Rep varchar(100), Comment varchar(max)"
-                              ", Dispute_Reason varchar(max), Batch_DT date)")
+            self.asql.execute("CREATE TABLE DS (DS_ID int, DSB_ID int, Dispute_Type varchar(10)"
+                              ", Rep varchar(100), Comment varchar(max), Dispute_Reason varchar(max), Batch_DT date)")
             self.asql.execute("CREATE TABLE DH (DH_ID int, DSB_ID int, Display_Status varchar(100)"
                               ", Source_File varchar(255))")
 
@@ -140,6 +140,7 @@ class Seeds:
                 OUTPUT
                     INSERTED.DS_ID,
                     INSERTED.DSB_ID,
+                    INSERTED.Dispute_Type,
                     INSERTED.Rep,
                     INSERTED.Comment,
                     INSERTED.Dispute_Reason,
@@ -396,8 +397,8 @@ class Seeds:
                 '''.format(cost_type))
 
         self.appenddisputes()
-        processresults(self.folder_name, self.asql, 'myseeds', 'New Seed Disputes')
 
-        if not self.asql:
+        if not self.df.empty:
+            processresults(self.folder_name, self.asql, 'myseeds', 'New Seed Disputes')
             self.asql.close()
 
