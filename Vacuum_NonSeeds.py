@@ -37,8 +37,9 @@ class NonSeeds:
                 self.asql.execute("DROP TABLE DH")
 
             self.asql.execute("CREATE TABLE DSB (DSB_ID int, Stc_Claim_Number varchar(255))")
-            self.asql.execute("CREATE TABLE DS (DS_ID int, DSB_ID int)")
-            self.asql.execute("CREATE TABLE DH (DH_ID int, DSB_ID int)")
+            self.asql.execute("CREATE TABLE DS (DS_ID int, DSB_ID int, Rep varchar(100), Batch_DT date)")
+            self.asql.execute("CREATE TABLE DH (DH_ID int, DSB_ID int, Display_Status varchar(100)"
+                              ", Source_File varchar(255))")
             self.asql.execute('''
                 insert into {0}
                 (
@@ -100,7 +101,9 @@ class NonSeeds:
     
                 OUTPUT
                     INSERTED.DS_ID,
-                    INSERTED.DSB_ID
+                    INSERTED.DSB_ID,
+                    INSERTED.Rep,
+                    INSERTED.Batch_DT
     
                 INTO DS
     
@@ -163,7 +166,9 @@ class NonSeeds:
 
                 OUTPUT
                     INSERTED.DH_ID,
-                    INSERTED.DSB_ID
+                    INSERTED.DSB_ID,
+                    INSERTED.Display_Status,
+                    INSERTED.Source_File
 
                 INTO DH
 
@@ -199,21 +204,67 @@ class NonSeeds:
             self.asql.execute('''
                 insert into {0}
                 (
-                    DS_ID,
                     DSB_ID,
-                    DH_ID,
-                    Open_Dispute
+                    Vendor,
+                    Platform,
+                    State,
+                    BAN,
+                    USI,
+                    Source_TBL,
+                    Source_ID,
+                    STC_Claim_Number,
+                    #_Of_Escalations,
+                    Status,
+                    Display_Status,
+                    Date_Submitted,
+                    Norm_Dispute_Category,
+                    Dispute_Category,
+                    Audit_Type,
+                    Disputer,
+                    Comment,
+                    Dispute_Amount,
+                    Dispute_Reason,
+                    Date_Updated,
+                    Batch,
+                    Edit_Date,
+                    Source_File
                 )
                 select
-                    DS.DS_ID,
-                    DS.DSB_ID,
-                    DH.DH_ID,
-                    1
+                    DSB.DSB_ID,
+                    A.Vendor,
+                    A.Platform,
+                    A.State,
+                    A.BAN,
+                    A.USI,
+                    A.Source_TBL,
+                    A.Source_ID,
+                    A.STC_Claim_Number,
+                    0,
+                    'Open',
+                    case
+                        when DH.Display_Status is not null then DH.Display_Status
+                        else 'Pending Review'
+                    end,
+                    getdate(),
+                    A.Dispute_Category,
+                    A.Dispute_Category,
+                    A.Audit_Type,
+                    DS.Rep,
+                    A.Comment,
+                    A.Dispute_Amt,
+                    A.Dispute_Reason,
+                    getdate(),
+                    DS.Batch_DT,
+                    getdate(),
+                    DH.Source_File
 
                 from DSB
                 inner join DS
                 on
                     DSB.DSB_ID = DS.DSB_ID
+                inner join myseeds A
+                on
+                    DSB.STC_Claim_Number = A.STC_Claim_Number
                 left join DH
                 on
                     DSB.DSB_ID = DH.DSB_ID

@@ -35,7 +35,7 @@ class Seeds:
         self.args['DC_Sel'] = '''DSB.DSB_ID, A.Vendor, A.Platform, A.State, A.BAN, A.USI, A.Source_TBL, A.Source_ID
             , DSB.STC_Claim_Number, 0, 'Open', case when DH.Display_Status is not null then DH.Display_Status
             else 'Pending Review' end, getdate(), A.Dispute_Category, A.Dispute_Category, A.Audit_Type, DS.Rep
-            , DS.Comment, A.Dispute_Amt, DS.Dispute_Reason, getdate(), DS.Batch, getdate(), DH.Source_File
+            , DS.Comment, A.Dispute_Amt, DS.Dispute_Reason, getdate(), DS.Batch_DT, getdate(), DH.Source_File
         '''
 
         if self.df.empty:
@@ -94,7 +94,7 @@ class Seeds:
 
             self.asql.execute("CREATE TABLE DSB (DSB_ID int, Stc_Claim_Number varchar(255))")
             self.asql.execute("CREATE TABLE DS (DS_ID int, DSB_ID int, Rep varchar(100), Comment varchar(max)"
-                              ", Dispute_Reason varchar(max), Batch date)")
+                              ", Dispute_Reason varchar(max), Batch_DT date)")
             self.asql.execute("CREATE TABLE DH (DH_ID int, DSB_ID int, Display_Status varchar(100)"
                               ", Source_File varchar(255))")
 
@@ -143,7 +143,7 @@ class Seeds:
                     INSERTED.Rep,
                     INSERTED.Comment,
                     INSERTED.Dispute_Reason,
-                    INSERTED.Batch
+                    INSERTED.Batch_DT
 
                 INTO DS
 
