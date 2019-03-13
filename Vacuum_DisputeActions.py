@@ -193,6 +193,11 @@ class DisputeActions:
         '''.format(settings['Dispute_Current'], settings['CAT_Emp'], getbatch()))
 
     def paid(self):
+        if self.df.none:
+            amount = 'Amount_Or_Days'
+        else:
+            amount = 'Amount'
+
         if self.asql.query("select object_id('DH')").iloc[0, 0]:
             self.asql.execute("DROP TABLE DH")
 
@@ -235,15 +240,15 @@ class DisputeActions:
                 D.Date_Submitted,
                 D.ILEC_Confirmation,
                 D.ILEC_Comments,
-                A.
+                A.{4},
+                A.Credit_Invoice_Date,
                 D.Escalate,
                 D.Escalate_DT,
                 D.Escalate_Amount
                 D.Dispute_Reason,
                 D.STC_Index,
-                A.Action_Norm_Reason,
-                A.Action_Reason,
                 B.Full_Name,
+                D.Resolution_Date,
                 getdate(),
                 'GRT Status: {3}'
 
@@ -257,7 +262,7 @@ class DisputeActions:
             inner join {0} As D
             on
                 A.DH_ID = C.DH_ID
-        '''.format(settings['Dispute_History'], settings['CAT_Emp'], settings['Dispute_Current'], getbatch()))
+        '''.format(settings['Dispute_History'], settings['CAT_Emp'], settings['Dispute_Current'], getbatch(), amount))
 
         self.asql.execute('''
             UPDATE B
