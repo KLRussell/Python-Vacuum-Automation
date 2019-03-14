@@ -315,12 +315,12 @@ def processresults(folder_name, asql, table, action):
 
 
 def defaultheader(df, columns):
-    if not df.none and columns:
-        columns.replace(chr(10), '').replace(chr(32), '').split(',')
+    if not df.empty and columns:
+        columns = columns.replace(chr(10), '').replace(chr(32), '').split(',')
 
         for col in columns:
             if col not in df.columns.str.lower():
-                df[col] = None
+                df[col.title()] = None
 
         return df
 

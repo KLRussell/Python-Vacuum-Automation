@@ -83,7 +83,7 @@ def process_updates(files):
                         df = parsed.loc[parsed['Action'] == action]
 
                         if not df.empty:
-                            myobj = DisputeActions(action, df, folder_name)
+                            myobj = DisputeActions(action=action, folder_name=folder_name, df=df)
                             myobj.process()
                 del parsed
             del xmlobj

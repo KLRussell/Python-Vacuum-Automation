@@ -21,8 +21,6 @@ class Seeds:
     def setdefaults(self):
         self.args['DSB_Cols'] = '''Vendor, Platform, BAN, STC_Claim_Number, Bill_Date, USI, Dispute_Amount
             , BanMaster_ID, Source_TBL, Source_ID'''
-        self.args['DSB_Sel'] = '''Vendor, Platform, BAN, '{0}_' + left(Record_Type,1) + cast(Seed as varchar)
-            , Bill_Date, USI, Dispute_Amount, BanMaster_ID, Source_TBL, Source_ID'''.format(getbatch())
         self.args['DSB_On'] = '''
             DSB.Stc_Claim_Number='{0}_' + left(A.Record_Type,1) + cast(A.Cost_Type_Seed as varchar)
             '''.format(getbatch())
@@ -40,6 +38,8 @@ class Seeds:
 
         if self.df.empty:
             self.args['email'] = "A.Source_TBL = 'PCI'"
+            self.args['DSB_Sel'] = '''Vendor, Platform, BAN, '{0}_' + left(Record_Type,1) + cast(Seed as varchar)
+                        , Bill_Date, USI, Dispute_Amount, BanMaster_ID, Source_TBL, Source_ID'''.format(getbatch())
             self.args['DS_Cols'] = '''DSB_ID, Rep, Dispute_Type, Cost_Type, Cost_Type_Seed, State, USOC, USOC_Desc
                 , CPID,  Record_Type, Dispute_Category, Audit_Type, STC_Claim_Number, Bill_Date, Billed_Amt
                 , Claimed_Amt, Dispute_Reason, Billed_Phrase_Code, Causing_SO, PON, Comment, Confidence, Batch_DT'''
@@ -53,9 +53,13 @@ class Seeds:
             self.args['DH_Sel'] = '''DSB.DSB_ID, 'GRT CNR', 'Filed', getdate(), A.Action_Reason, B.Full_Name
                 , getdate(), 'GRT Status: ' + format(getdate(),'yyyyMMdd')'''
             self.args['DH_Whr'] = "A.Claim_Channel = 'Email'"
+            self.args['email2'] = "A.Claim_Channel = 'Email'"
         else:
             self.args['email'] = "A.Dispute_Status = case when A.Dispute_Status is not null then A.Dispute_Status " \
                                  "else 'Filed' end"
+            self.args['email2'] = "A.Dispute_Type = 'Email'"
+            self.args['DSB_Sel'] = '''Vendor, Platform, BAN, '{0}_' + left(Record_Type,1) + cast(Cost_Type_Seed as varchar)
+                        , Bill_Date, USI, Dispute_Amt, BanMaster_ID, Source_TBL, Source_ID'''.format(getbatch())
             self.args['DS_Cols'] = '''DSB_ID, Rep, Dispute_Type, Cost_Type, Cost_Type_Seed, State, USOC, USOC_Desc
             , CPID, Record_Type, Dispute_Category, Audit_Type, STC_Claim_Number, Bill_Date, Billed_Amt
             , Claimed_Amt, Dispute_Reason, Billed_Phrase_Code, Causing_SO, PON, CLLI, Usage_Rate, MOU, Jurisdiction
@@ -108,7 +112,7 @@ class Seeds:
                     A.Error_Columns is null
                         and
                     {1}
-            '''.format(self.args['DH_Whr'], self.args['email']))
+            '''.format(self.args['email2'], self.args['email']))
 
             self.asql.execute('''
                 insert into {0}
@@ -214,7 +218,7 @@ class Seeds:
                 left join DH
                 on
                     DSB.DSB_ID = DH.DSB_ID
-            '''.format(settings['Dispute_Fact'], self.args['DC_Cols'], self.args['DC_Sel'], self.args['DSB_On']))
+            '''.format(settings['Dispute_Current'], self.args['DC_Cols'], self.args['DC_Sel'], self.args['DSB_On']))
 
             self.asql.execute('drop table DS, DSB, DH')
 
@@ -278,7 +282,7 @@ class Seeds:
                     A.Bill_Date=B.Bill_Date,
                     A.State=B.State,
                     A.USOC=case
-                        when A.USOC then A.USOC
+                        when A.USOC is not null then A.USOC
                         else B.USOC
                     end,
                     A.USOC_Desc=case
@@ -312,7 +316,7 @@ class Seeds:
                     A.Bill_Date=B.Bill_Date,
                     A.State=B.State,
                     A.USOC=case
-                        when A.USOC then A.USOC
+                        when A.USOC is not null then A.USOC
                         else B.USOC
                     end,
                     A.USOC_Desc=case
@@ -322,7 +326,7 @@ class Seeds:
                     A.Billed_Amt=B.Amount,
                     A.dispute_amt=isnull(A.dispute_amt, B.Amount),
                     A.Phrase_Code=case
-                        when A.Phrase_Cose is not null then A.Phrase_Code
+                        when A.Phrase_Code is not null then A.Phrase_Code
                         else B.Phrase_Code
                     end,
                     A.Causing_SO=case
@@ -359,7 +363,7 @@ class Seeds:
                     A.State=B.State,
                     A.Billed_Amt=B.Amount,
                     A.dispute_amt=isnull(A.dispute_amt,B.Amount),
-                    A.USI=case when A.USI is not null then A.USE else B.BTN end,
+                    A.USI=case when A.USI is not null then A.USI else B.BTN end,
                     A.Usage_Rate=case
                         when A.Usage_Rate is not null then A.Usage_Rate
                         else B.Usage_Rate
@@ -391,7 +395,7 @@ class Seeds:
                     A.Billed_Amt=B.Amount,
                     A.dispute_amt=isnull(A.dispute_amt,B.Amount),
                     A.Phrase_Code=case
-                        when A.Phrase_Cose is not null then A.Phrase_Code
+                        when A.Phrase_Code is not null then A.Phrase_Code
                         else B.Phrase_Code
                     end
                 '''.format(cost_type))

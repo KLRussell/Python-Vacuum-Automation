@@ -19,6 +19,20 @@ class DisputeActions:
                 , action_reason, assign_rep, note_tag, attachment, ilec_confirmation, error_columns, error_message''')
 
     def escalate(self):
+        self.asql.execute('''
+            update A
+                set
+                    A.Error_Columns = 'DSB_ID',
+                    A.Error_Message = 'DSB_ID does not exist in Dispute Current'
+
+            FROM mydisputes As A
+            left join {0} As B
+            on
+                A.DSB_ID = B.DSB_ID
+
+            where
+                B.DSB_ID is null'''.format(settings['Dispute_Current']))
+
         if self.asql.query("select object_id('DH')").iloc[0, 0]:
             self.asql.execute("DROP TABLE DH")
 
@@ -56,7 +70,7 @@ class DisputeActions:
                 'Filed',
                 C.Date_Submitted,
                 C.ILEC_Confirmation,
-                C.LEC_Comments,
+                C.ILEC_Comments,
                 'Y',
                 cast(getdate() as date),
                 C.Dispute_Amount,
@@ -103,10 +117,21 @@ class DisputeActions:
 
         self.asql.execute('DROP TABLE DH')
 
-        if not self.df.empty:
-            processresults(self.folder_name, self.asql, 'mydisputes', self.action)
-
     def close(self):
+        self.asql.execute('''
+            update A
+                set
+                    A.Error_Columns = 'DSB_ID',
+                    A.Error_Message = 'DSB_ID does not exist in Dispute Current'
+
+            FROM mydisputes As A
+            left join {0} As B
+            on
+                A.DSB_ID = B.DSB_ID
+
+            where
+                B.DSB_ID is null'''.format(settings['Dispute_Current']))
+
         if self.asql.query("select object_id('DH')").iloc[0, 0]:
             self.asql.execute("DROP TABLE DH")
 
@@ -149,13 +174,13 @@ class DisputeActions:
                 D.ILEC_Comments,
                 D.Escalate,
                 D.Escalate_DT,
-                D.Escalate_Amount
+                D.Escalate_Amount,
                 D.Dispute_Reason,
                 D.STC_Index,
                 A.Action_Norm_Reason,
                 A.Action_Reason,
                 B.Full_Name,
-                B.Resolution_Date,
+                D.Resolution_Date,
                 getdate(),
                 'GRT Status: {3}'
 
@@ -197,10 +222,21 @@ class DisputeActions:
 
         self.asql.execute('DROP TABLE DH')
 
-        if not self.df.empty:
-            processresults(self.folder_name, self.asql, 'mydisputes', self.action)
-
     def paid(self):
+        self.asql.execute('''
+            update A
+                set
+                    A.Error_Columns = 'DSB_ID',
+                    A.Error_Message = 'DSB_ID does not exist in Dispute Current'
+
+            FROM mydisputes As A
+            left join {0} As B
+            on
+                A.DSB_ID = B.DSB_ID
+
+            where
+                B.DSB_ID is null'''.format(settings['Dispute_Current']))
+
         if not self.df.empty:
             validatecol(self.asql, 'mydisputes', 'Amount_Or_Days')
             validatecol(self.asql, 'mydisputes', 'Credit_Invoice_Date', True)
@@ -253,7 +289,7 @@ class DisputeActions:
                 A.Credit_Invoice_Date,
                 D.Escalate,
                 D.Escalate_DT,
-                D.Escalate_Amount
+                D.Escalate_Amount,
                 D.Dispute_Reason,
                 D.STC_Index,
                 B.Full_Name,
@@ -306,26 +342,23 @@ class DisputeActions:
 
         self.asql.execute('DROP TABLE DH')
 
-        if not self.df.empty:
-            processresults(self.folder_name, self.asql, 'mydisputes', self.action)
-
     def denied(self):
         self.asql.execute('''
             update A
                 set
                     A.Error_Columns = 'DSB_ID',
                     A.Error_Message = case
-                        when DC.ID is null then 'DSB_ID does not exist in Dispute Current'
+                        when B.DSB_ID is null then 'DSB_ID does not exist in Dispute Current'
                         else 'Dispute_Type is not Email for DSB_ID'
                     end
 
             FROM mydisputes As A
             left join {0} As B
             on
-                A.DSB_ID = C.DSB_ID
+                A.DSB_ID = B.DSB_ID
 
             where
-                B.DC.ID is null
+                B.DSB_ID is null
                     or
                 B.Dispute_Type != 'Email'
         '''.format(settings['Dispute_Current']))
@@ -370,7 +403,7 @@ class DisputeActions:
                 A.Action_Reason,
                 D.Escalate,
                 D.Escalate_DT,
-                D.Escalate_Amount
+                D.Escalate_Amount,
                 D.Dispute_Reason,
                 D.STC_Index,
                 B.Full_Name,
@@ -398,7 +431,7 @@ class DisputeActions:
             SET
                 B.Display_Status = 'Denied - Pending',
                 B.ILEC_Confirmation = A.ILEC_Confirmation,
-                B.ILEC_Comment = A.Action_Reason,
+                B.ILEC_Comments = A.Action_Reason,
                 B.Last_GRT_Action = 'Denied - Pending',
                 B.Last_GRT_Action_Rep = C.Full_Name,
                 B.Date_Updated = getdate(),
@@ -422,9 +455,6 @@ class DisputeActions:
 
         self.asql.execute('DROP TABLE DH')
 
-        if not self.df.empty:
-            processresults(self.folder_name, self.asql, 'mydisputes', self.action)
-
     def approved(self):
         validatecol(self.asql, 'mydisputes', 'Amount_Or_Days')
 
@@ -433,17 +463,17 @@ class DisputeActions:
                 set
                     A.Error_Columns = 'DSB_ID',
                     A.Error_Message = case
-                        when DC.ID is null then 'DSB_ID does not exist in Dispute Current'
+                        when B.DSB_ID is null then 'DSB_ID does not exist in Dispute Current'
                         else 'Dispute_Type is not Email for DSB_ID'
                     end
                     
             FROM mydisputes As A
             left join {0} As B
             on
-                A.DSB_ID = C.DSB_ID
+                A.DSB_ID = B.DSB_ID
             
             where
-                B.DC.ID is null
+                B.DSB_ID is null
                     or
                 B.Dispute_Type != 'Email'
         '''.format(settings['Dispute_Current']))
@@ -486,13 +516,13 @@ class DisputeActions:
                 D.Dispute_Category,
                 'Approved',
                 D.Date_Submitted,
-                D.ILEC_Confirmation,
-                D.ILEC_Comments,
+                A.ILEC_Confirmation,
+                A.Action_Reason,
                 A.Amount_Or_Days,
                 D.Denied,
                 D.Escalate,
                 D.Escalate_DT,
-                D.Escalate_Amount
+                D.Escalate_Amount,
                 D.Dispute_Reason,
                 D.STC_Index,
                 B.Full_Name,
@@ -543,10 +573,21 @@ class DisputeActions:
 
         self.asql.execute('DROP TABLE DH')
 
-        if not self.df.empty:
-            processresults(self.folder_name, self.asql, 'mydisputes', self.action)
-
     def disputenote(self):
+        self.asql.execute('''
+            update A
+                set
+                    A.Error_Columns = 'DSB_ID',
+                    A.Error_Message = 'DSB_ID does not exist in Dispute Current'
+
+            FROM mydisputes As A
+            left join {0} As B
+            on
+                A.DSB_ID = B.DSB_ID
+
+            where
+                B.DSB_ID is null'''.format(settings['Dispute_Current']))
+
         if not self.df.empty:
             validatecol(self.asql, 'mydisputes', 'Amount_Or_Days')
 
@@ -581,7 +622,7 @@ class DisputeActions:
                 B.Norm_Note_Action = A.Action_Norm_Reason,
                 B.Dispute_Note = A.Action_Reason,
                 B.Note_Group_Tag = A.Note_Tag,
-                B.Note_Assigned_To = case when A.Assign_Rep is not null then A.Assign_Rep else B.Full_Name end,
+                B.Note_Assigned_To = case when A.Assign_Rep is not null then A.Assign_Rep else C.Full_Name end,
                 B.Days_Till_Note_Review = A.Amount_Or_Days,
                 B.Note_Added_On = getdate()
 
@@ -597,26 +638,21 @@ class DisputeActions:
                 Error_Columns is null
         '''.format(settings['Dispute_Current'], settings['CAT_Emp']))
 
-        self.asql.execute('DROP TABLE DH')
-
-        if not self.df.empty:
-            processresults(self.folder_name, self.asql, 'mydisputes', self.action)
-
     def process(self):
         if not self.asql:
             writelog("Processing {0} GRT Dispute Actions".format(len(self.df)), 'info')
 
             self.asql = SQLConnect('alch')
             self.asql.connect()
-            self.asql.upload(self.df, 'grtactions')
+            self.asql.upload(self.df, 'mydisputes')
 
         if self.action == 'Escalate':
             self.escalate()
         elif self.action == 'Close':
             self.close()
         elif self.action == 'Paid':
-            validatecol(self.asql, 'grtactions', 'Amount')
-            validatecol(self.asql, 'grtactions', 'Credit_Invoice_Date', True)
+            validatecol(self.asql, 'mydisputes', 'Amount_Or_Days')
+            validatecol(self.asql, 'mydisputes', 'Credit_Invoice_Date', True)
             self.paid()
         elif self.action == 'Denied':
             self.denied()
