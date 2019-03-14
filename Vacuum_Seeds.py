@@ -51,7 +51,7 @@ class Seeds:
             self.args['DH_Cols'] = '''DSB_ID, Dispute_Category, Display_Status, Date_Submitted, Dispute_Reason
                 , GRT_Update_Rep, Date_Updated, Source_File'''
             self.args['DH_Sel'] = '''DSB.DSB_ID, 'GRT CNR', 'Filed', getdate(), A.Action_Reason, B.Full_Name
-                , getdate(), 'GRT Email: ' + format(getdate(),'yyyyMMdd')'''
+                , getdate(), 'GRT Status: ' + format(getdate(),'yyyyMMdd')'''
             self.args['DH_Whr'] = "A.Claim_Channel = 'Email'"
         else:
             self.args['email'] = "A.Dispute_Status = case when A.Dispute_Status is not null then A.Dispute_Status " \
@@ -71,7 +71,7 @@ class Seeds:
                 , Credit_Received_Invoice_Date, GRT_Update_Rep, Date_Updated, Source_File'''
             self.args['DH_Sel'] = '''DSB.DSB_ID, A.Dispute_Category, A.Dispute_Status, getdate()
                 , A.Dispute_Reason, A.ILEC_Confirmation, A.ILEC_Comment, A.Approved_Amt, A.Received_Amt
-                , A.Received_Invoice_Date, B.Full_Name, getdate(), 'GRT Email: ' + format(getdate(),'yyyyMMdd')'''
+                , A.Received_Invoice_Date, B.Full_Name, getdate(), 'GRT Status: ' + format(getdate(),'yyyyMMdd')'''
             self.args['DH_Whr'] = "A.Dispute_Type = 'Email' and A.Dispute_Status is null"
 
             self.df = defaultheader(self.df, '''dispute_type, cost_type, cost_type_seed, dispute_category, audit_type

@@ -103,6 +103,9 @@ class DisputeActions:
 
         self.asql.execute('DROP TABLE DH')
 
+        if not self.df.empty:
+            processresults(self.folder_name, self.asql, 'mydisputes', self.action)
+
     def close(self):
         if self.asql.query("select object_id('DH')").iloc[0, 0]:
             self.asql.execute("DROP TABLE DH")
@@ -165,20 +168,20 @@ class DisputeActions:
                 A.DSB_ID = C.DSB_ID
             inner join {0} As D
             on
-                A.DH_ID = C.DH_ID
+                D.DH_ID = C.DH_ID
         '''.format(settings['Dispute_History'], settings['CAT_Emp'], settings['Dispute_Current'], getbatch()))
 
         self.asql.execute('''
             UPDATE B
-            SET
-                B.Display_Status = 'Denied - Closed',
-                B.Norm_Close_Reason = A.Action_Norm_Reason,
-                B.Close_Reason = A.Action_Reason,
-                B.Last_GRT_Action = 'GRT Escalate',
-                B.Last_GRT_Action_Rep = C.Full_Name,
-                B.Date_Updated = getdate(),
-                B.Source_File = 'GRT Status: {2}',
-                B.DH_ID = DH.DH_ID
+                SET
+                    B.Display_Status = 'Denied - Closed',
+                    B.Norm_Close_Reason = A.Action_Norm_Reason,
+                    B.Close_Reason = A.Action_Reason,
+                    B.Last_GRT_Action = 'GRT Escalate',
+                    B.Last_GRT_Action_Rep = C.Full_Name,
+                    B.Date_Updated = getdate(),
+                    B.Source_File = 'GRT Status: {2}',
+                    B.DH_ID = DH.DH_ID
 
             FROM mydisputes As A
             INNER JOIN {0} As B
@@ -191,6 +194,11 @@ class DisputeActions:
             ON
                 A.DSB_ID = DH.DSB_ID
         '''.format(settings['Dispute_Current'], settings['CAT_Emp'], getbatch()))
+
+        self.asql.execute('DROP TABLE DH')
+
+        if not self.df.empty:
+            processresults(self.folder_name, self.asql, 'mydisputes', self.action)
 
     def paid(self):
         if not self.df.empty:
@@ -240,6 +248,8 @@ class DisputeActions:
                 D.ILEC_Confirmation,
                 D.ILEC_Comments,
                 A.Amount_Or_Days,
+                D.Denied,
+                A.Amount_Or_Days,
                 A.Credit_Invoice_Date,
                 D.Escalate,
                 D.Escalate_DT,
@@ -260,7 +270,7 @@ class DisputeActions:
                 A.DSB_ID = C.DSB_ID
             inner join {0} As D
             on
-                A.DH_ID = C.DH_ID
+                D.DH_ID = C.DH_ID
             
             where
                 Error_Columns is null
@@ -288,22 +298,37 @@ class DisputeActions:
                 A.Comp_Serial = C.Comp_Serial
             INNER JOIN DH
             ON
-                A.DSB_ID = DH.DSB_ID
+                B.DSB_ID = DH.DSB_ID
                 
             where
                 Error_Columns is null
         '''.format(settings['Dispute_Current'], settings['CAT_Emp'], getbatch()))
+
+        self.asql.execute('DROP TABLE DH')
 
         if not self.df.empty:
             processresults(self.folder_name, self.asql, 'mydisputes', self.action)
 
     def denied(self):
         self.asql.execute('''
+            update A
+                set
+                    A.Error_Columns = 'DSB_ID',
+                    A.Error_Message = case
+                        when DC.ID is null then 'DSB_ID does not exist in Dispute Current'
+                        else 'Dispute_Type is not Email for DSB_ID'
+                    end
 
-        ''')
+            FROM mydisputes As A
+            left join {0} As B
+            on
+                A.DSB_ID = C.DSB_ID
 
-    def approved(self):
-        validatecol(self.asql, 'mydisputes', 'Amount_Or_Days')
+            where
+                B.DC.ID is null
+                    or
+                B.Dispute_Type != 'Email'
+        '''.format(settings['Dispute_Current']))
 
         if self.asql.query("select object_id('DH')").iloc[0, 0]:
             self.asql.execute("DROP TABLE DH")
@@ -319,10 +344,6 @@ class DisputeActions:
                 Date_Submitted,
                 ILEC_Confirmation,
                 ILEC_Comments,
-                Credit_Approved,
-                Denied,
-                Credit_Received_Amount,
-                Credit_Received_Invoice_Date,
                 Escalate,
                 Escalate_DT,
                 Escalate_Amount,
@@ -343,12 +364,10 @@ class DisputeActions:
             SELECT
                 A.DSB_ID,
                 D.Dispute_Category,
-                'Paid',
+                'Approved',
                 D.Date_Submitted,
-                D.ILEC_Confirmation,
-                D.ILEC_Comments,
-                A.Amount_Or_Days,
-                A.Credit_Invoice_Date,
+                A.ILEC_Confirmation,
+                A.Action_Reason,
                 D.Escalate,
                 D.Escalate_DT,
                 D.Escalate_Amount
@@ -368,7 +387,7 @@ class DisputeActions:
                 A.DSB_ID = C.DSB_ID
             inner join {0} As D
             on
-                A.DH_ID = C.DH_ID
+                D.DH_ID = C.DH_ID
 
             where
                 Error_Columns is null
@@ -377,11 +396,10 @@ class DisputeActions:
         self.asql.execute('''
             UPDATE B
             SET
-                B.Display_Status = 'Paid',
-                B.Credit_Approved = A.Amount_Or_Days,
-                B.Credit_Received_Amount = A.Amount_Or_Days,
-                B.Credit_Received_Invoice_Date = A.Credit_Invoice_Date,
-                B.Last_GRT_Action = 'Paid',
+                B.Display_Status = 'Denied - Pending',
+                B.ILEC_Confirmation = A.ILEC_Confirmation,
+                B.ILEC_Comment = A.Action_Reason,
+                B.Last_GRT_Action = 'Denied - Pending',
                 B.Last_GRT_Action_Rep = C.Full_Name,
                 B.Date_Updated = getdate(),
                 B.Source_File = 'GRT Status: {2}',
@@ -402,7 +420,131 @@ class DisputeActions:
                 Error_Columns is null
         '''.format(settings['Dispute_Current'], settings['CAT_Emp'], getbatch()))
 
-        processresults(self.folder_name, self.asql, 'mydisputes', self.action)
+        self.asql.execute('DROP TABLE DH')
+
+        if not self.df.empty:
+            processresults(self.folder_name, self.asql, 'mydisputes', self.action)
+
+    def approved(self):
+        validatecol(self.asql, 'mydisputes', 'Amount_Or_Days')
+
+        self.asql.execute('''
+            update A
+                set
+                    A.Error_Columns = 'DSB_ID',
+                    A.Error_Message = case
+                        when DC.ID is null then 'DSB_ID does not exist in Dispute Current'
+                        else 'Dispute_Type is not Email for DSB_ID'
+                    end
+                    
+            FROM mydisputes As A
+            left join {0} As B
+            on
+                A.DSB_ID = C.DSB_ID
+            
+            where
+                B.DC.ID is null
+                    or
+                B.Dispute_Type != 'Email'
+        '''.format(settings['Dispute_Current']))
+
+        if self.asql.query("select object_id('DH')").iloc[0, 0]:
+            self.asql.execute("DROP TABLE DH")
+
+        self.asql.execute("CREATE TABLE DH (DH_ID int, DSB_ID int)")
+
+        self.asql.execute('''
+            INSERT INTO {0}
+            (
+                DSB_ID,
+                Dispute_Category,
+                Display_Status,
+                Date_Submitted,
+                ILEC_Confirmation,
+                ILEC_Comments,
+                Credit_Approved,
+                Denied,
+                Escalate,
+                Escalate_DT,
+                Escalate_Amount,
+                Dispute_Reason,
+                STC_Index,
+                GRT_Update_Rep,
+                Resolution_Date,
+                Date_Updated,
+                Source_File
+            )
+            OUTPUT
+                INSERTED.DH_ID,
+                INSERTED.DSB_ID
+
+            INTO
+                DH
+
+            SELECT
+                A.DSB_ID,
+                D.Dispute_Category,
+                'Approved',
+                D.Date_Submitted,
+                D.ILEC_Confirmation,
+                D.ILEC_Comments,
+                A.Amount_Or_Days,
+                D.Denied,
+                D.Escalate,
+                D.Escalate_DT,
+                D.Escalate_Amount
+                D.Dispute_Reason,
+                D.STC_Index,
+                B.Full_Name,
+                D.Resolution_Date,
+                getdate(),
+                'GRT Status: {3}'
+
+            FROM mydisputes As A
+            INNER JOIN {1} As B
+            ON
+                A.Comp_Serial = B.Comp_Serial
+            inner join {2} As C
+            on
+                A.DSB_ID = C.DSB_ID
+            inner join {0} As D
+            on
+                D.DH_ID = C.DH_ID
+
+            where
+                Error_Columns is null
+        '''.format(settings['Dispute_History'], settings['CAT_Emp'], settings['Dispute_Current'], getbatch()))
+
+        self.asql.execute('''
+            UPDATE B
+            SET
+                B.Display_Status = 'Approved',
+                B.Credit_Approved = A.Amount_Or_Days,
+                B.Last_GRT_Action = 'Approved',
+                B.Last_GRT_Action_Rep = C.Full_Name,
+                B.Date_Updated = getdate(),
+                B.Source_File = 'GRT Status: {2}',
+                B.DH_ID = DH.DH_ID
+
+            FROM mydisputes As A
+            INNER JOIN {0} As B
+            ON
+                A.DSB_ID = B.DSB_ID
+            INNER JOIN {1} As C
+            ON
+                A.Comp_Serial = C.Comp_Serial
+            INNER JOIN DH
+            ON
+                A.DSB_ID = DH.DSB_ID
+
+            where
+                Error_Columns is null
+        '''.format(settings['Dispute_Current'], settings['CAT_Emp'], getbatch()))
+
+        self.asql.execute('DROP TABLE DH')
+
+        if not self.df.empty:
+            processresults(self.folder_name, self.asql, 'mydisputes', self.action)
 
     def disputenote(self):
         if not self.df.empty:
@@ -454,6 +596,8 @@ class DisputeActions:
             where
                 Error_Columns is null
         '''.format(settings['Dispute_Current'], settings['CAT_Emp']))
+
+        self.asql.execute('DROP TABLE DH')
 
         if not self.df.empty:
             processresults(self.folder_name, self.asql, 'mydisputes', self.action)
