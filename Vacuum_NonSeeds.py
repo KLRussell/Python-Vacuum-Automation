@@ -15,18 +15,18 @@ class NonSeeds:
     def __init__(self, df, folder_name):
         self.df = df
         self.folder_name = folder_name
-        self.df = defaultheader(self.df, '''dispute_type, record_type, ban, bill_date, billed_amt, dispute_amt
+        self.df = defaultheader(self.df, '''dispute_type, stc_claim_number, record_type, ban, bill_date, billed_amt, dispute_amt
             , dispute_category, audit_type, confidence, dispute_reason, usi, state, usoc, usoc_desc, pon, phrase_code
             , causing_so, clli, usage_rate, mou, jurisdiction, short_paid, comment, dispute_status, ilec_confirmation
             , ilec_comment, approved_amt, received_amt, received_invoice_date, Error_Columns, Error_Message''')
 
-        self.df['stc_claim_number'] = \
-            map(lambda stc_claim_number, row: "{0}_X{1}".format(getbatch(), random.randint(10000000, 10000000000))
-                , self.df['stc_claim_number'])
+        self.df['Stc_Claim_Number'] = df['Stc_Claim_Number']\
+            .map(lambda x: "{0}_X{1}".format(getbatch(), random.randint(10000000, 10000000000)))
     # df['stc_claim_number'] = "{0}_X{1}".format(getbatch(), random.randint(10000000, 10000000000))
 
     def appenddisputes(self):
-        if self.asql.query("select object_id('mydisputes')").iloc[0, 0]:
+        if self.asql.query("select object_id('mydisputes')").iloc[0, 0]\
+                and self.asql.query("select count(*) from mydisputes").iloc[0, 0] > 0:
             if self.asql.query("select object_id('DS')").iloc[0, 0]:
                 self.asql.execute("DROP TABLE DS")
 
@@ -205,13 +205,10 @@ class NonSeeds:
                 insert into {0}
                 (
                     DSB_ID,
-                    Vendor,
-                    Platform,
                     State,
                     BAN,
+                    Bill_Date,
                     USI,
-                    Source_TBL,
-                    Source_ID,
                     STC_Claim_Number,
                     #_Of_Escalations,
                     Status,
@@ -231,13 +228,10 @@ class NonSeeds:
                 )
                 select
                     DSB.DSB_ID,
-                    A.Vendor,
-                    A.Platform,
                     A.State,
                     A.BAN,
+                    A.Bill_Date,
                     A.USI,
-                    A.Source_TBL,
-                    A.Source_ID,
                     A.STC_Claim_Number,
                     0,
                     'Open',
@@ -262,13 +256,13 @@ class NonSeeds:
                 inner join DS
                 on
                     DSB.DSB_ID = DS.DSB_ID
-                inner join myseeds A
+                inner join mydisputes A
                 on
                     DSB.STC_Claim_Number = A.STC_Claim_Number
                 left join DH
                 on
                     DSB.DSB_ID = DH.DSB_ID
-            '''.format(settings['Dispute_Fact']))
+            '''.format(settings['Dispute_Current']))
 
             self.asql.execute('drop table DS, DSB, DH')
 

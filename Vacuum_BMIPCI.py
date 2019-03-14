@@ -24,7 +24,7 @@ class BMIPCI:
             , action_reason, usi, start_date, claim_channel, confidence, pon, macnum, audit_group, prov_category
             , prov_recommendation, prov_norm_reason, prov_sub_reason, amount_or_days, credit_invoice_date, vendor
             , platform, ban, bill_date, state, billed_amt, dispute_amt, usoc, usoc_desc, cpid, banmaster_id
-            , phrase_code, causing_so, error_columns, error_message''')
+            , phrase_code, causing_so, jurisdiction, usage_rate, error_columns, error_message''')
 
     def update_map(self, source_tbl, bmb_tbl, bmm_tbl, unmapped_tbl):
             param = None
@@ -158,13 +158,17 @@ class BMIPCI:
         else:
             zerorevtbl = settings['PCI_ZeroRevenue']
 
+        if self.asql.query("select object_id('mydata')").iloc[0, 0]:
+            self.asql.execute('drop table mydata')
+
         if dispute:
             self.asql.upload(self.asql.query('''
                 select distinct
                     Source_ID,
-                    Action_Comment
+                    Action_Comment,
+                    Comp_Serial
 
-                from mytbl2
+                from myseeds
 
                 where
                     Source_TBL = '{0}'
@@ -181,7 +185,8 @@ class BMIPCI:
                     Source_TBL = '{0}'
             '''.format(source)), 'mydata')
 
-        if self.asql.query("select object_id('mydata')").iloc[0, 0]:
+        if self.asql.query("select object_id('mydata')").iloc[0, 0]\
+                and self.asql.query("select count(*) from mydata").iloc[0, 0] > 0:
             self.asql.execute('''
                 INSERT INTO {0}
                 (
@@ -199,7 +204,7 @@ class BMIPCI:
                     B.Tag,
                     '{4}',
                     C.Initials,
-                    A.{5},
+                    {5},
                     getdate()
 
                 from mydata As A
@@ -430,7 +435,8 @@ class BMIPCI:
                     "'FRAC'"
                 )
 
-            if self.asql.query("select object_id('myseeds')").iloc[0, 0]:
+            if self.asql.query("select object_id('myseeds')").iloc[0, 0]\
+                    and self.asql.query("select count(*) from myseeds").iloc[0, 0] > 0:
                 self.asql.execute('''
                     with
                         MY_TMP
@@ -759,7 +765,8 @@ class BMIPCI:
                 A.Error_Columns is null
         '''.format(settings['CAT_Emp'], settings['Dispute_Current'])), 'mydisputes')
 
-        if not self.asql.query("select object_id('mydisputes')").iloc[0, 0]:
+        if self.asql.query("select object_id('mydisputes')").iloc[0, 0]\
+                and self.asql.query("select count(*) from mydata").iloc[0, 0] > 0:
             self.asql.execute('''
                 WITH
                     MYTMP
@@ -842,7 +849,8 @@ class BMIPCI:
                 )
         '''.format(settings['DisputeCurrent'])), 'mydisputes')
 
-        if not self.asql.query("select object_id('mydisputes')").iloc[0, 0]:
+        if self.asql.query("select object_id('mydisputes')").iloc[0, 0]\
+                and self.asql.query("select count(*) from mydata").iloc[0, 0] > 0:
             self.asql.execute('''
                 WITH
                     MYTMP
@@ -932,7 +940,8 @@ class BMIPCI:
                     B.Dispute_Type = 'Email'
                 )'''.format(settings['Dispute_Current'])), 'mydisputes')
 
-        if not self.asql.query("select object_id('mydisputes')").iloc[0, 0]:
+        if self.asql.query("select object_id('mydisputes')").iloc[0, 0]\
+                and self.asql.query("select count(*) from mydata").iloc[0, 0] > 0:
             self.asql.execute('''
                 WITH
                     MYTMP
@@ -1017,7 +1026,8 @@ class BMIPCI:
                     B.Dispute_Type = 'Email'
                 )'''.format(settings['Dispute_Current'])), 'mydisputes')
 
-        if not self.asql.query("select object_id('mydisputes')").iloc[0, 0]:
+        if self.asql.query("select object_id('mydisputes')").iloc[0, 0]\
+                and self.asql.query("select count(*) from mydata").iloc[0, 0] > 0:
             self.asql.execute('''
                 WITH
                     MYTMP
