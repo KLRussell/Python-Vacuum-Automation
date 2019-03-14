@@ -728,6 +728,8 @@ class BMIPCI:
                 cast(C.Edit_Date as date) = cast(getdate() as date)
             '''.format(settings['Dispute_Current'], settings['Dispute_Notes']))
 
+        validatecol(self.asql, 'grtactions', 'Amount_Or_Days')
+
         self.asql.upload(self.asql.query('''
             select
                 C.DSB_ID,
@@ -735,7 +737,9 @@ class BMIPCI:
                 A.Action_Norm_Reason,
                 A.Action_Reason,
                 A.Amount_Or_Days,
-                getdate() Edit_Date
+                getdate() Edit_Date,
+                Error_Columns=NULL,
+                Error_Message=NULL
 
             from mytbl A
             inner join {0} As B
