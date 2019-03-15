@@ -31,6 +31,7 @@ def process_errors():
         df = get_errors(os.path.basename(dirpath))
         if not df.empty:
             writelog('Processing {0} items from Error virtual list'.format(len(df.index)))
+            print(df[['Source_TBL', 'Source_ID','Error_Message']])
     del df
 
 

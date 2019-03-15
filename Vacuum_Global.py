@@ -322,6 +322,9 @@ def defaultheader(df, columns):
             if col not in df.columns.str.lower():
                 df[col.title()] = None
 
+        for col in df.columns:
+            df[col] = df[col].str.strip()
+
         return df
 
 

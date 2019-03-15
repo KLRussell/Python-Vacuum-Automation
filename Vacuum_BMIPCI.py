@@ -27,10 +27,14 @@ class BMIPCI:
             , phrase_code, causing_so, jurisdiction, usage_rate, error_columns, error_message''')
 
     def update_map(self, source_tbl, bmb_tbl, bmm_tbl, unmapped_tbl):
-            param = None
-
             if source_tbl == 'BMI':
                 param = ", C.frameID=B.initials"
+                tblid = '{0}_ID'.format(source_tbl)
+                edit = 'edit_Dt'
+            else:
+                param = ''
+                tblid = 'ID'
+                edit = 'edit_date'
 
             self.asql.execute('''
                 insert into {1}
@@ -38,13 +42,15 @@ class BMIPCI:
                     gs_srvID,
                     gs_srvType,
                     {0}_ID,
-                    Rep
+                    Rep,
+                    {3}
                 )
                 select
                     A.gs_srvID,
                     A.gs_srvType,
                     A.Source_ID,
-                    B.initials
+                    B.initials,
+                    getdate()
 
                 from mytbl2 As A
                 inner join {2} As B
@@ -55,7 +61,7 @@ class BMIPCI:
                     A.BMB = 1
                         and
                     A.Error_Columns is null
-                '''.format(source_tbl, bmb_tbl, settings['CAT_Emp']))
+                '''.format(source_tbl, bmb_tbl, settings['CAT_Emp'], edit))
 
             self.asql.execute('''
                 update C
@@ -71,11 +77,23 @@ class BMIPCI:
                     A.Comp_Serial = B.Comp_Serial
                 inner join {1} As C
                 on
-                    A.Source_ID = C.{0}_ID
+                    A.Source_ID = C.{4}
 
                 where
                     A.Error_Columns is null
-                '''.format(source_tbl, bmm_tbl, settings['CAT_Emp'], param))
+                '''.format(source_tbl, bmm_tbl, settings['CAT_Emp'], param, tblid))
+
+            self.asql.upload(self.asql.query('''
+                select distinct
+                    Source_ID,
+                    Action_Comment,
+                    Comp_Serial
+                    
+                from mytbl2
+                
+                where
+                    Error_Columns is null
+            '''), 'mytbl')
 
             self.asql.execute('''
                 insert into {1}
@@ -93,14 +111,13 @@ class BMIPCI:
                     A.action_comment,
                     getdate()
 
-                from mytbl2 As A
+                from mytbl As A
                 inner join {2} As B
                 on
                     A.Comp_Serial = B.Comp_Serial
-
-                where
-                    A.Error_Columns is null
             '''.format(source_tbl, unmapped_tbl, settings['CAT_Emp']))
+
+            self.asql.execute('DROP TABLE mytbl')
 
     def grab_seeds(self, data, tbl, seed, on, where, cost_type, record_type, inner=""):
         cols = "A." + ", A.".join(data.loc[:, ~data.columns.isin(['Action', 'Start_Date'])].columns.values)
@@ -143,7 +160,93 @@ class BMIPCI:
                 )
             '''.format(cols2) + myquery)
 
+    def updateunmapped(self, source, audit_result, comment, dispute=False, action=None):
+        if comment and action:
+            mycomment = "concat('{1} - ', A.{0})".format(comment, action)
+        elif comment:
+            mycomment = 'A.{0}'.format(comment)
+        elif comment:
+            mycomment = "'{0}'".format(action)
+        else:
+            mycomment = "NULL"
+
+        if source == 'BMI':
+            unmappedtbl = settings['Unmapped']
+        else:
+            unmappedtbl = settings['PCI_Unmapped']
+
+        if self.asql.query("select object_id('mydata')").iloc[0, 0]:
+            self.asql.execute('drop table mydata')
+
+        if dispute:
+            self.asql.upload(self.asql.query('''
+                select distinct
+                    A.Source_ID,
+                    A.Action_Comment,
+                    A.Comp_Serial
+
+                from myseeds As A
+                inner join {1} As B
+                on
+                    A.Source_ID = B.Source_ID
+
+                where
+                    A.Source_TBL = '{0}'
+                        and
+                    B.TAG = 'unmapped'
+            '''.format(source, settings['CNR'])), 'mydata')
+        else:
+            self.asql.upload(self.asql.query('''
+                select
+                    A.*
+
+                from mytbl As A
+                inner join {1} As B
+                on
+                    A.Source_ID = B.Source_ID
+
+                where
+                    A.Error_Columns is null
+                        and
+                    A.Source_TBL = '{0}'
+                        and
+                    B.TAG = 'unmapped'
+            '''.format(source, settings['CNR'])), 'mydata')
+
+        if self.asql.query("select object_id('mydata')").iloc[0, 0] \
+                and self.asql.query("select count(*) from mydata").iloc[0, 0] > 0:
+            self.asql.execute('''
+                INSERT INTO {0}
+                (
+                    {1}_ID,
+                    Audit_Result,
+                    Rep,
+                    Comment,
+                    Edit_Date
+                )
+                select
+                    A.Source_ID,
+                    '{4}',
+                    C.Initials,
+                    {5},
+                    getdate()
+
+                from mydata As A
+                inner join {2} As B
+                on
+                    B.Source_TBL = '{1}'
+                        and
+                    A.Source_ID = B.Source_ID
+                inner join {3} As C
+                on
+                    A.Comp_Serial = C.Comp_Serial
+            '''.format(unmappedtbl, source, settings['CNR'], settings['CAT_Emp'], audit_result, mycomment))
+
+            self.asql.execute('DROP TABLE mydata')
+
     def updatezerorev(self, source, audit_result, comment, dispute=False, action=None):
+        self.updateunmapped(source, audit_result, comment, dispute, action)
+
         if comment and action:
             mycomment = "concat('{1} - ', A.{0})".format(comment, action)
         elif comment:
@@ -164,26 +267,37 @@ class BMIPCI:
         if dispute:
             self.asql.upload(self.asql.query('''
                 select distinct
-                    Source_ID,
-                    Action_Comment,
-                    Comp_Serial
+                    A.Source_ID,
+                    A.Action_Comment,
+                    A.Comp_Serial
 
-                from myseeds
+                from myseeds As A
+                inner join {1} As B
+                on
+                    A.Source_ID = B.Source_ID
 
                 where
-                    Source_TBL = '{0}'
-            '''.format(source)), 'mydata')
+                    A.Source_TBL = '{0}'
+                        and
+                    B.TAG != 'unmapped'
+            '''.format(source, settings['CNR'])), 'mydata')
         else:
             self.asql.upload(self.asql.query('''
                 select
-                    *
-                from mytbl
+                    A.*
+                    
+                from mytbl As A
+                inner join {1} As B
+                on
+                    A.Source_ID = B.Source_ID
 
                 where
-                    Error_Columns is null
+                    A.Error_Columns is null
                         and
-                    Source_TBL = '{0}'
-            '''.format(source)), 'mydata')
+                    A.Source_TBL = '{0}'
+                        and
+                    B.TAG != 'unmapped'
+            '''.format(source, settings['CNR'])), 'mydata')
 
         if self.asql.query("select object_id('mydata')").iloc[0, 0]\
                 and self.asql.query("select count(*) from mydata").iloc[0, 0] > 0:
@@ -246,6 +360,7 @@ class BMIPCI:
         if not data.empty:
             writelog("Validating {0} maps(s) for {1}".format(len(data.index), source_tbl), 'info')
 
+            data['Gs_SrvID'] = data['Gs_SrvID'].str.replace(', ', ',')
             self.asql.upload(data, 'mytbl')
 
             self.asql.upload(self.asql.query('''
@@ -289,7 +404,7 @@ class BMIPCI:
                 update A
                     set
                         A.Error_Columns = 'Gs_SrvType, Gs_SrvID',
-                        A.Error_Message = Gs_SrvType + ' ' + cast(Gs_SrvID as varchar) + ' is not found in {0}'
+                        A.Error_Message = Gs_SrvType + ' ' + cast(A.Gs_SrvID as varchar) + ' is not found in {0}'
 
                 from mytbl2 As A
                 left join {0} As B
@@ -301,8 +416,9 @@ class BMIPCI:
 
             self.asql.execute('''
                 update A
+                set
                     A.Error_Columns = 'Gs_SrvType, Gs_SrvID',
-                    A.Error_Message = 'BMB table is already mapped to ' + Gs_SrvType + ' ' + cast(Gs_SrvID as varchar)
+                    A.Error_Message = 'BMB table is already mapped to ' + B.Gs_SrvType + ' ' + cast(B.Gs_SrvID as varchar)
 
                 from mytbl2 As A
                 inner join {0} As B
@@ -318,8 +434,9 @@ class BMIPCI:
 
             self.asql.execute('''
                 update A
+                set
                     A.Error_Columns = 'Gs_SrvType, Gs_SrvID',
-                    A.Error_Message = 'BMB table is already mapped to ' + Gs_SrvType + ' ' + cast(Gs_SrvID as varchar)
+                    A.Error_Message = 'BMB table is already mapped to ' + B.Gs_SrvType + ' ' + cast(B.Gs_SrvID as varchar)
 
                 from mytbl2 As A
                 inner join {0} As B
@@ -332,6 +449,21 @@ class BMIPCI:
 
                 where
                     A.BMB = 1'''.format(settings['PCI_BMB']))
+
+            self.asql.execute('''
+                update A
+                    set
+                        A.Error_Columns=B.Error_Columns,
+                        A.Error_Message=B.Error_Message
+                
+                from mytbl2 A
+                inner join mytbl2 B
+                on
+                    A.Source_ID = B.Source_ID
+                where
+                    A.Error_Columns is null
+                        and
+                    B.Error_Columns is not null''')
 
             if source_tbl == 'BMI':
                 self.update_map(source_tbl, settings['BMB'], settings['BMM'], settings['Unmapped'])
@@ -532,7 +664,7 @@ class BMIPCI:
             select distinct
                 DATA.*,
                 CNR.Vendor,
-                CNR.BAN,
+                CNR.BAN CNR_BAN,
                 CNR.BTN,
                 CNR.WTN,
                 CNR.Circuit_ID,
@@ -589,7 +721,7 @@ class BMIPCI:
                 A.Source_ID,
                 A.Product_Type,
                 A.Vendor,
-                A.BAN,
+                case when A.BAN is not null then A.BAN else A.CNR_BAN end,
                 A.BTN,
                 A.WTN,
                 A.Circuit_ID,
