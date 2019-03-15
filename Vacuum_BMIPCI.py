@@ -242,6 +242,25 @@ class BMIPCI:
                     A.Comp_Serial = C.Comp_Serial
             '''.format(unmappedtbl, source, settings['CNR'], settings['CAT_Emp'], audit_result, mycomment))
 
+            self.asql.execute('''
+                update B
+                set
+                    B.Audit_Result = '{4}',
+                    B.Rep = C.Initials,
+                    B.Comment = {5},
+                    B.Edit_Date = getdate()
+                    
+                from mydata As A
+                inner join {2} As B
+                on
+                    B.Source_TBL = '{1}'
+                        and
+                    A.Source_ID = B.Source_ID
+                inner join {3} As C
+                on
+                    A.Comp_Serial = C.Comp_Serial
+            '''.format(unmappedtbl, source, settings['CNR'], settings['CAT_Emp'], audit_result, mycomment))
+
             self.asql.execute('DROP TABLE mydata')
 
     def updatezerorev(self, source, audit_result, comment, dispute=False, action=None):
@@ -321,6 +340,25 @@ class BMIPCI:
                     {5},
                     getdate()
 
+                from mydata As A
+                inner join {2} As B
+                on
+                    B.Source_TBL = '{1}'
+                        and
+                    A.Source_ID = B.Source_ID
+                inner join {3} As C
+                on
+                    A.Comp_Serial = C.Comp_Serial
+            '''.format(zerorevtbl, source, settings['CNR'], settings['CAT_Emp'], audit_result, mycomment))
+
+            self.asql.execute('''
+                update B
+                set
+                    B.Audit_Result = '{4}',
+                    B.Rep = C.Initials,
+                    B.Comment = {5},
+                    B.Edit_Date = getdate()
+                
                 from mydata As A
                 inner join {2} As B
                 on
