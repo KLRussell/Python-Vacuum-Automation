@@ -205,6 +205,7 @@ class DisputeActions:
             UPDATE B
                 SET
                     B.Display_Status = 'Denied - Closed',
+                    B.Status = 'Closed',
                     B.Norm_Close_Reason = A.Action_Norm_Reason,
                     B.Close_Reason = A.Action_Reason,
                     B.Last_GRT_Action = 'GRT Escalate',
@@ -324,6 +325,7 @@ class DisputeActions:
             UPDATE B
             SET
                 B.Display_Status = 'Paid',
+                B.Status = 'Closed',
                 B.Credit_Approved = A.Amount_Or_Days,
                 B.Credit_Received_Amount = A.Amount_Or_Days,
                 B.Credit_Received_Invoice_Date = A.Credit_Invoice_Date,

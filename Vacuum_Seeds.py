@@ -33,7 +33,7 @@ class Seeds:
             , A.USI, A.Source_TBL, A.Source_ID, DSB.STC_Claim_Number, 0, 'Open'
             , case when DH.Display_Status is not null then DH.Display_Status else 'Pending Review' end
             , getdate(), 'GRT CNR', 'GRT CNR', 'CNR Audit', DS.Rep, DS.Comment, A.Dispute_Amt, DS.Dispute_Reason
-            , getdate(), DS.Batch_DT, getdate(), DH.Source_File, DSB.DH_ID
+            , getdate(), DS.Batch_DT, getdate(), DH.Source_File, DH.DH_ID
                     '''
             self.args['email'] = "A.Source_TBL = 'PCI'"
             self.args['DSB_Sel'] = '''Vendor, Platform, BAN, '{0}_' + left(Record_Type,1) + cast(Seed as varchar)

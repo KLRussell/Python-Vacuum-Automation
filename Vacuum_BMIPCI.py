@@ -182,7 +182,7 @@ class BMIPCI:
             self.asql.upload(self.asql.query('''
                 select distinct
                     A.Source_ID,
-                    A.Action_Comment,
+                    A.Action_Reason,
                     A.Comp_Serial
 
                 from myseeds As A
@@ -268,7 +268,7 @@ class BMIPCI:
             self.asql.upload(self.asql.query('''
                 select distinct
                     A.Source_ID,
-                    A.Action_Comment,
+                    A.Action_Reason,
                     A.Comp_Serial
 
                 from myseeds As A
