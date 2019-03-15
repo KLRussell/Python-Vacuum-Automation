@@ -90,6 +90,7 @@ def process_updates(files):
             del xmlobj
         del upload_date, folder_name
         writeblank = True
+        os.remove(file)
 
 
 app = QtWidgets.QApplication(sys.argv).instance()
@@ -100,15 +101,22 @@ if __name__ == '__main__':
         writelog('', 'info')
 
     writelog('Starting Vacuum...', 'info')
+    continue_flag = False
 
-    Has_Updates = None
+    while 1 == 0:
+        Has_Updates = None
 
-    while Has_Updates is None:
-        Has_Updates = check_for_updates()
-        sleep(1)
+        while Has_Updates is None:
+            Has_Updates = check_for_updates()
+            sleep(1)
 
-    process_updates(Has_Updates)
-    process_errors()
+            if continue_flag:
+                writelog('Vacuum sniffing for updates', 'info')
+                continue_flag = False
+
+        process_updates(Has_Updates)
+        process_errors()
+        continue_flag = True
 
     os.system('pause')
 
