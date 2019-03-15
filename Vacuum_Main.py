@@ -103,7 +103,7 @@ if __name__ == '__main__':
     writelog('Starting Vacuum...', 'info')
     continue_flag = False
 
-    while 1 == 0:
+    while 1 != 0:
         Has_Updates = None
 
         while Has_Updates is None:
