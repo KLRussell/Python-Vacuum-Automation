@@ -118,6 +118,6 @@ if __name__ == '__main__':
         process_errors()
         continue_flag = True
 
-    os.system('pause')
+    # os.system('pause')
 
 gc.collect()
