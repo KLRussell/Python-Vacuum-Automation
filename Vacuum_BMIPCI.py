@@ -596,8 +596,8 @@ class BMIPCI:
                     where
                         B.Source_TBL is null''')
 
-                self.updatezerorev('BMI', 'Dispute Review', 'Action_Comment', True, 'New Dispute')
-                self.updatezerorev('PCI', 'Dispute Review', 'Action_Comment', True, 'New Dispute')
+                self.updatezerorev('BMI', 'Dispute Review', 'Action_Reason', True, 'New Dispute')
+                self.updatezerorev('PCI', 'Dispute Review', 'Action_Reason', True, 'New Dispute')
 
                 myobj = Seeds(self.folder_name, self.asql)
                 myobj.dispute()
@@ -857,7 +857,7 @@ class BMIPCI:
             inner join {1} As C
             on
                 B.DSB_ID = C.DSB_ID
-            
+                
             where
                 B.Status = 'Open'
                     and
@@ -866,16 +866,22 @@ class BMIPCI:
                 cast(C.Edit_Date as date) = cast(getdate() as date)
             '''.format(settings['Dispute_Current'], settings['Dispute_Notes']))
 
-        validatecol(self.asql, 'grtactions', 'Amount_Or_Days')
+        validatecol(self.asql, 'mytbl', 'Amount_Or_Days')
 
         self.asql.upload(self.asql.query('''
             select
                 C.DSB_ID,
+                A.Source_TBL,
+                A.Source_ID,
+                A.Comp_Serial,
                 B.Full_Name,
                 A.Action_Norm_Reason,
                 A.Action_Reason,
                 A.Amount_Or_Days,
                 getdate() Edit_Date,
+                NULL Note_Tag,
+                NULL Assign_Rep,
+                NULL Attachment,
                 Error_Columns=NULL,
                 Error_Message=NULL
 
@@ -898,7 +904,7 @@ class BMIPCI:
         '''.format(settings['CAT_Emp'], settings['Dispute_Current'])), 'mydisputes')
 
         if self.asql.query("select object_id('mydisputes')").iloc[0, 0]\
-                and self.asql.query("select count(*) from mydata").iloc[0, 0] > 0:
+                and self.asql.query("select count(*) from mydisputes").iloc[0, 0] > 0:
             self.asql.execute('''
                 WITH
                     MYTMP
@@ -945,10 +951,10 @@ class BMIPCI:
                         A.Error_Columns = 'Source_TBL, Source_ID',
                         A.Error_Message = 'There are no open STC filed GRT CNR disputes for this Source_TBL & Source_ID combo'
 
-                FROM mytbl
+                FROM mytbl As A
                 
                 WHERE
-                    Error_Columns is null
+                    A.Error_Columns is null
             ''')
 
         processresults(self.folder_name, self.asql, 'mytbl', self.action)
@@ -982,7 +988,7 @@ class BMIPCI:
         '''.format(settings['DisputeCurrent'])), 'mydisputes')
 
         if self.asql.query("select object_id('mydisputes')").iloc[0, 0]\
-                and self.asql.query("select count(*) from mydata").iloc[0, 0] > 0:
+                and self.asql.query("select count(*) from mydisputes").iloc[0, 0] > 0:
             self.asql.execute('''
                 WITH
                     MYTMP
@@ -1073,7 +1079,7 @@ class BMIPCI:
                 )'''.format(settings['Dispute_Current'])), 'mydisputes')
 
         if self.asql.query("select object_id('mydisputes')").iloc[0, 0]\
-                and self.asql.query("select count(*) from mydata").iloc[0, 0] > 0:
+                and self.asql.query("select count(*) from mydisputes").iloc[0, 0] > 0:
             self.asql.execute('''
                 WITH
                     MYTMP
@@ -1159,7 +1165,7 @@ class BMIPCI:
                 )'''.format(settings['Dispute_Current'])), 'mydisputes')
 
         if self.asql.query("select object_id('mydisputes')").iloc[0, 0]\
-                and self.asql.query("select count(*) from mydata").iloc[0, 0] > 0:
+                and self.asql.query("select count(*) from mydisputes").iloc[0, 0] > 0:
             self.asql.execute('''
                 WITH
                     MYTMP

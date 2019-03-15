@@ -5,18 +5,20 @@ from Vacuum_Global import processresults
 from Vacuum_Global import writelog
 from Vacuum_Global import defaultheader
 from Vacuum_Global import getbatch
+import pandas as pd
 
 
 class DisputeActions:
-    def __init__(self, action, folder_name, asql=None, df=None):
+    def __init__(self, action, folder_name, asql=None, df=pd.DataFrame()):
         self.action = action
         self.df = df
         self.folder_name = folder_name
         self.asql = asql
 
         if not self.df.empty:
-            self.df = defaultheader(self.df, '''dispute_id, action, amount, credit_invoice_date, action_norm_reason
-                , action_reason, assign_rep, note_tag, attachment, ilec_confirmation, error_columns, error_message''')
+            self.df = defaultheader(self.df, '''dispute_id, action, amount_or_days, credit_invoice_date
+                , action_norm_reason, action_reason, assign_rep, note_tag, attachment, ilec_confirmation
+                , error_columns, error_message''')
 
     def escalate(self):
         self.asql.execute('''
@@ -598,14 +600,20 @@ class DisputeActions:
                 Logged_By,
                 Norm_Note_Action,
                 Dispute_Note,
-                Days_Till_Action
+                Days_Till_Action,
+                Assign_Rep,
+                Note_Tag,
+                Attachment
             )
             select
                 A.DSB_ID,
                 B.Full_Name,
                 A.Action_Norm_Reason,
                 A.Action_Reason,
-                A.Amount_Or_Days
+                A.Amount_Or_Days,
+                A.Assign_Rep,
+                A.Note_Tag,
+                A.Attachment
 
             from mydisputes As A
             INNER JOIN {1} As B
