@@ -111,7 +111,8 @@ if __name__ == '__main__':
         sleep(1)
 
         if continue_flag:
-            writelog('Vacuum sniffing for updates', 'info')
+            writelog('', 'info')
+            writelog('Vacuum sniffing floor for crumbs...', 'info')
             continue_flag = False
 
     process_updates(Has_Updates)

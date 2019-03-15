@@ -325,7 +325,7 @@ class Seeds:
                       '''.format(settings['MRC_CMP']))
             elif 'OCC' == cost_type:
                 self.grabseedinfo(settings[cost_type], 'bdt_{0}_id'.format(cost_type), cost_type, '''
-                    A.Record_Type='B.Activity_Type',
+                    A.Record_Type=upper(B.Activity_Type),
                     A.Vendor=B.Vendor,
                     A.Platform=B.Platform,
                     A.BAN=B.BAN,
