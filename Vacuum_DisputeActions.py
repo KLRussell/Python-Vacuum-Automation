@@ -196,6 +196,9 @@ class DisputeActions:
             inner join {0} As D
             on
                 D.DH_ID = C.DH_ID
+            
+            where
+                A.Error_Columns is null
         '''.format(settings['Dispute_History'], settings['CAT_Emp'], settings['Dispute_Current'], getbatch()))
 
         self.asql.execute('''
@@ -220,6 +223,9 @@ class DisputeActions:
             INNER JOIN DH
             ON
                 A.DSB_ID = DH.DSB_ID
+            
+            where
+                A.Error_Columns is null
         '''.format(settings['Dispute_Current'], settings['CAT_Emp'], getbatch()))
 
         self.asql.execute('DROP TABLE DH')
@@ -601,7 +607,7 @@ class DisputeActions:
                 Norm_Note_Action,
                 Dispute_Note,
                 Days_Till_Action,
-                Assign_Rep,
+                Assign_To,
                 Note_Tag,
                 Attachment
             )

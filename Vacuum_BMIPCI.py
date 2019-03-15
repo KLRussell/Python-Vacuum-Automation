@@ -967,7 +967,7 @@ class BMIPCI:
         self.asql.upload(self.asql.query('''
             select
                 A.*,
-                E.DSB_ID
+                B.DSB_ID
 
             from mytbl As A
             inner join {0} As B
@@ -1056,7 +1056,7 @@ class BMIPCI:
         self.asql.upload(self.asql.query('''
             select
                 A.*,
-                E.DSB_ID
+                B.DSB_ID
 
             from mytbl As A
             inner join {0} As B
@@ -1144,7 +1144,7 @@ class BMIPCI:
         self.asql.upload(self.asql.query('''
             select
                 A.*,
-                E.DSB_ID
+                B.DSB_ID
 
             from mytbl As A
             inner join {0} As B
@@ -1197,7 +1197,7 @@ class BMIPCI:
                     A.Error_Columns is null
             ''')
 
-            myobj = DisputeActions('Closed', self.folder_name, self.asql)
+            myobj = DisputeActions('Close', self.folder_name, self.asql)
             myobj.process()
 
             self.updatezerorev('BMI', 'Dispute Review', None, False, 'GRT Closed')
@@ -1219,7 +1219,6 @@ class BMIPCI:
                 WHERE
                     A.Error_Columns is null
             ''')
-
         processresults(self.folder_name, self.asql, 'mytbl', self.action)
 
     def sendtoaudit(self):
@@ -1268,7 +1267,7 @@ class BMIPCI:
             self.sendtoprov()
         elif self.action == 'Send to LV':
             self.sendtolv()
-        elif self.action == 'Dispute Note' or self.action == 'Close Disputes':
+        elif self.action == 'Dispute Note':
             self.adddn()
         elif self.action == 'Escalate Disputes':
             self.addescalate()

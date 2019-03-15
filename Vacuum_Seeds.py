@@ -25,14 +25,15 @@ class Seeds:
         self.args['DC_Cols'] = '''DSB_ID, Dispute_Type, Vendor, Platform, State, BAN, Bill_Date, USI, Source_TBL, Source_ID, STC_Claim_Number
             , #_Of_Escalations, Status, Display_Status, Date_Submitted, Norm_Dispute_Category
             , Dispute_Category, Audit_Type, Disputer, Comment, Dispute_Amount, Dispute_Reason
-            , Date_Updated, Batch, Edit_Date, Source_File
+            , Date_Updated, Batch, Edit_Date, Source_File, DH_ID
         '''
 
         if self.df.empty:
-            self.args['DC_Sel'] = '''DSB.DSB_ID, DS.Dispute_Type, A.Vendor, A.Platform, A.State, A.BAN, A.Bill_Date, A.USI, A.Source_TBL, A.Source_ID
-                        , DSB.STC_Claim_Number, 0, 'Open', case when DH.Display_Status is not null then DH.Display_Status
-                        else 'Pending Review' end, getdate(), 'GRT CNR', 'GRT CNR', 'CNR Audit', DS.Rep
-                        , DS.Comment, A.Dispute_Amt, DS.Dispute_Reason, getdate(), DS.Batch_DT, getdate(), DH.Source_File
+            self.args['DC_Sel'] = '''DSB.DSB_ID, DS.Dispute_Type, A.Vendor, A.Platform, A.State, A.BAN, A.Bill_Date
+            , A.USI, A.Source_TBL, A.Source_ID, DSB.STC_Claim_Number, 0, 'Open'
+            , case when DH.Display_Status is not null then DH.Display_Status else 'Pending Review' end
+            , getdate(), 'GRT CNR', 'GRT CNR', 'CNR Audit', DS.Rep, DS.Comment, A.Dispute_Amt, DS.Dispute_Reason
+            , getdate(), DS.Batch_DT, getdate(), DH.Source_File, DSB.DH_ID
                     '''
             self.args['email'] = "A.Source_TBL = 'PCI'"
             self.args['DSB_Sel'] = '''Vendor, Platform, BAN, '{0}_' + left(Record_Type,1) + cast(Seed as varchar)
@@ -55,10 +56,11 @@ class Seeds:
             self.args['DH_Whr'] = "A.Claim_Channel = 'Email'"
             self.args['email2'] = "A.Claim_Channel = 'Email'"
         else:
-            self.args['DC_Sel'] = '''DSB.DSB_ID, DS.Dispute_Type, A.Vendor, A.Platform, A.State, A.BAN, A.Bill_Date, A.USI, A.Source_TBL, A.Source_ID
-                        , DSB.STC_Claim_Number, 0, 'Open', case when DH.Display_Status is not null then DH.Display_Status
-                        else 'Pending Review' end, getdate(), A.Dispute_Category, A.Dispute_Category, A.Audit_Type, DS.Rep
-                        , DS.Comment, A.Dispute_Amt, DS.Dispute_Reason, getdate(), DS.Batch_DT, getdate(), DH.Source_File
+            self.args['DC_Sel'] = '''DSB.DSB_ID, DS.Dispute_Type, A.Vendor, A.Platform, A.State, A.BAN, A.Bill_Date
+                , A.USI, A.Source_TBL, A.Source_ID, DSB.STC_Claim_Number, 0, 'Open'
+                , case when DH.Display_Status is not null then DH.Display_Status else 'Pending Review' end
+                , getdate(), A.Dispute_Category, A.Dispute_Category, A.Audit_Type, DS.Rep, DS.Comment, A.Dispute_Amt
+                , DS.Dispute_Reason, getdate(), DS.Batch_DT, getdate(), DH.Source_File, DSB.DH_ID
                     '''
             self.args['email'] = "A.Dispute_Status = case when A.Dispute_Status is not null then A.Dispute_Status " \
                                  "else 'Filed' end"

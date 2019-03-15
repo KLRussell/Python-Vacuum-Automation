@@ -224,7 +224,8 @@ class NonSeeds:
                     Date_Updated,
                     Batch,
                     Edit_Date,
-                    Source_File
+                    Source_File,
+                    DH_ID
                 )
                 select
                     DSB.DSB_ID,
@@ -250,7 +251,8 @@ class NonSeeds:
                     getdate(),
                     DS.Batch_DT,
                     getdate(),
-                    DH.Source_File
+                    DH.Source_File,
+                    DSB.DH_ID
 
                 from DSB
                 inner join DS
