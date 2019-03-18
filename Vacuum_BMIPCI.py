@@ -261,8 +261,7 @@ class BMIPCI:
                     A.Comp_Serial = C.Comp_Serial
             '''.format(unmappedtbl, source, settings['CNR'], settings['CAT_Emp'], audit_result, mycomment))
 
-            self.asql.execute('DROP TABLE mydata')
-        elif self.asql.query("select object_id('mydata')").iloc[0, 0]:
+        if self.asql.query("select object_id('mydata')").iloc[0, 0]:
             self.asql.execute('DROP TABLE mydata')
 
     def updatezerorev(self, source, audit_result, comment, dispute=False, action=None):
@@ -372,8 +371,7 @@ class BMIPCI:
                     A.Comp_Serial = C.Comp_Serial
             '''.format(zerorevtbl, source, settings['CNR'], settings['CAT_Emp'], audit_result, mycomment))
 
-            self.asql.execute('DROP TABLE mydata')
-        elif self.asql.query("select object_id('mydata')").iloc[0, 0]:
+        if self.asql.query("select object_id('mydata')").iloc[0, 0]:
             self.asql.execute('DROP TABLE mydata')
 
     def findcsrs(self):
@@ -669,6 +667,7 @@ class BMIPCI:
     def sendtoprov(self):
         writelog("Validating {0} {1}(s)".format(len(self.df.index), self.action), 'info')
 
+        self.df['Assigned_To'] = None
         self.asql.upload(self.df, 'mytbl')
 
         self.asql.execute('''
@@ -705,6 +704,102 @@ class BMIPCI:
                 B.New_Root_Cause is null'''.format(settings['Send_To_Prov']))
 
         self.asql.upload(self.asql.query('''
+            select
+                C.DSB_ID,
+                A.Source_TBL,
+                A.Source_ID,
+                A.Comp_Serial,
+                B.Full_Name,
+                'Sent to LV' Action_Norm_Reason,
+                A.Action_Reason,
+                '{2}' Amount_Or_Days,
+                getdate() Edit_Date,
+                NULL Note_Tag,
+                C.Disputer Assign_Rep,
+                NULL Attachment,
+                NULL Error_Columns,
+                NULL Error_Message
+
+            from mytbl A
+            inner join {0} As B
+            on
+                A.Comp_Serial = B.Comp_Serial
+            inner join {1} As C
+            on
+                A.Source_TBL = C.Source_TBL
+                    and
+                A.Source_ID = C.Source_ID
+
+            where
+                C.Status = 'Open'
+                    and
+                C.Dispute_Category = 'GRT CNR'
+                    and
+                (
+                    C.Display_Status = 'Denied - Pending'
+                        or
+                    C.Dispute_Type = 'Email'
+                )
+                    and
+                A.Error_Columns is null
+        '''.format(settings['CAT_Emp'], settings['Dispute_Current'], settings['LV_DN_Duration'])), 'mydisputes')
+
+        if self.asql.query("select object_id('mydisputes')").iloc[0, 0] \
+                and self.asql.query("select count(*) from mydisputes").iloc[0, 0] > 0:
+            self.asql.execute('''
+                WITH
+                    MYTMP
+                AS
+                (
+                    SELECT
+                        Source_TBL,
+                        Source_ID,
+                        Assign_Rep
+                        row_number()
+                            over(
+                            partition by Source_TBL, Source_ID
+                            order by Assign_Rep, Date_Submitted desc) Filter
+
+                    FROM mydisputes
+                ),
+                    MYTMP2
+                As
+                (
+                    SELECT
+                        Source_TBL,
+                        Source_ID,
+                        Assign_Rep
+
+                    FROM MYTMP
+
+                    where
+                        Filter = 1
+                )
+
+                update A
+                    set
+                        A.Assigned_To = B.Assign_Rep
+
+                FROM mytbl As A
+                INNER JOIN MYTMP2 As B
+                ON
+                    A.Source_TBL = B.Source_TBL
+                        AND
+                    A.Source_ID = B.Source_ID
+
+                WHERE
+                    A.Error_Columns is not null
+            ''')
+
+            myobj = DisputeActions('Dispute Note', self.folder_name, self.asql)
+            myobj.process()
+
+            del myobj
+
+        if self.asql.query("select object_id('mydisputes')").iloc[0, 0]:
+            self.asql.execute("drop table mydisputes")
+
+        self.asql.upload(self.asql.query('''
             select distinct
                 DATA.*,
                 CNR.Vendor,
@@ -734,10 +829,11 @@ class BMIPCI:
         self.asql.execute('''
             insert into {0}
             (
+                Logged_By,
+                Assigned_To,
                 Batch,
                 Audit_Name,
                 Audit_Group,
-                CAT_Rep,
                 Source_TBL,
                 Source_ID,
                 Product,
@@ -757,10 +853,14 @@ class BMIPCI:
                 Sub_Reason
             )
             select
+                B.Full_Name,
+                case
+                    when A.Assigned_To is not null then A.Assigned_To
+                    else B.Full_Name
+                end,
                 eomonth(getdate()),
                 'CNR',
                 A.Audit_Group,
-                B.Initials,
                 A.Source_TBL,
                 A.Source_ID,
                 A.Product_Type,
@@ -925,10 +1025,9 @@ class BMIPCI:
             myobj = DisputeActions('Dispute Note', self.folder_name, self.asql)
             myobj.process()
 
-            self.asql.execute("drop table mydisputes")
-
             del myobj
-        elif self.asql.query("select object_id('mydisputes')").iloc[0, 0]:
+
+        if self.asql.query("select object_id('mydisputes')").iloc[0, 0]:
             self.asql.execute("drop table mydisputes")
 
         self.asql.execute('''
@@ -1164,7 +1263,7 @@ class BMIPCI:
                     A.Source_ID = B.Source_ID
                 
                 WHERE
-                    A.Source_TBL is null
+                    B.Source_TBL is null
                         and
                     A.Error_Columns is null
             ''')
@@ -1256,7 +1355,7 @@ class BMIPCI:
                     A.Source_ID = B.Source_ID
 
                 WHERE
-                    A.Source_TBL is null
+                    B.Source_TBL is null
                         and
                     A.Error_Columns is null
             ''')
@@ -1343,7 +1442,7 @@ class BMIPCI:
                     A.Source_ID = B.Source_ID
 
                 WHERE
-                    A.Source_TBL is null
+                    B.Source_TBL is null
                         and
                     A.Error_Columns is null
             ''')
