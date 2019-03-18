@@ -262,6 +262,8 @@ class BMIPCI:
             '''.format(unmappedtbl, source, settings['CNR'], settings['CAT_Emp'], audit_result, mycomment))
 
             self.asql.execute('DROP TABLE mydata')
+        elif self.asql.query("select object_id('mydata')").iloc[0, 0]:
+            self.asql.execute('DROP TABLE mydata')
 
     def updatezerorev(self, source, audit_result, comment, dispute=False, action=None):
         self.updateunmapped(source, audit_result, comment, dispute, action)
@@ -370,6 +372,8 @@ class BMIPCI:
                     A.Comp_Serial = C.Comp_Serial
             '''.format(zerorevtbl, source, settings['CNR'], settings['CAT_Emp'], audit_result, mycomment))
 
+            self.asql.execute('DROP TABLE mydata')
+        elif self.asql.query("select object_id('mydata')").iloc[0, 0]:
             self.asql.execute('DROP TABLE mydata')
 
     def findcsrs(self):
@@ -640,8 +644,6 @@ class BMIPCI:
                 myobj = Seeds(self.folder_name, self.asql)
                 myobj.dispute()
 
-                self.asql.execute("DROP TABLE myseeds")
-
                 del myobj
             else:
                 writelog("Warning! No cost found for {} of spreadsheet".format(source), 'info')
@@ -657,7 +659,11 @@ class BMIPCI:
                         Error_Columns is null
                 ''')
 
+            if self.asql.query("select object_id('myseeds')").iloc[0, 0]:
+                self.asql.execute("DROP TABLE myseeds")
+
             processresults(self.folder_name, self.asql, 'mytbl', self.action)
+
         del data
 
     def sendtoprov(self):
@@ -835,9 +841,9 @@ class BMIPCI:
                 A.Source_ID,
                 A.Comp_Serial,
                 B.Full_Name,
-                'Sent to LV',
+                'Sent to LV' Action_Norm_Reason,
                 A.Action_Reason,
-                14,
+                '{2}' Amount_Or_Days,
                 getdate() Edit_Date,
                 NULL Note_Tag,
                 C.Disputer Assign_Rep,
@@ -867,7 +873,7 @@ class BMIPCI:
                 )
                     and
                 A.Error_Columns is null
-        '''.format(settings['CAT_Emp'], settings['Dispute_Current'])), 'mydisputes')
+        '''.format(settings['CAT_Emp'], settings['Dispute_Current'], settings['LV_DN_Duration'])), 'mydisputes')
 
         if self.asql.query("select object_id('mydisputes')").iloc[0, 0] \
                 and self.asql.query("select count(*) from mydisputes").iloc[0, 0] > 0:
@@ -913,8 +919,6 @@ class BMIPCI:
                     A.Source_ID = B.Source_ID
 
                 WHERE
-                    A.Source_TBL is null
-                        and
                     A.Error_Columns is not null
             ''')
 
@@ -924,6 +928,8 @@ class BMIPCI:
             self.asql.execute("drop table mydisputes")
 
             del myobj
+        elif self.asql.query("select object_id('mydisputes')").iloc[0, 0]:
+            self.asql.execute("drop table mydisputes")
 
         self.asql.execute('''
             insert into {0}
@@ -1083,8 +1089,6 @@ class BMIPCI:
             self.updatezerorev('BMI', 'Dispute Review', 'Action_Reason', False, 'Dispute Note')
             self.updatezerorev('PCI', 'Dispute Review', 'Action_Reason', False, 'Dispute Note')
 
-            self.asql.execute("drop table mydisputes")
-
             del myobj
         else:
             self.asql.execute('''
@@ -1098,6 +1102,9 @@ class BMIPCI:
                 WHERE
                     A.Error_Columns is null
             ''')
+
+        if self.asql.query("select object_id('mydisputes')").iloc[0, 0]:
+            self.asql.execute("drop table mydisputes")
 
         processresults(self.folder_name, self.asql, 'mytbl', self.action)
 
@@ -1168,8 +1175,6 @@ class BMIPCI:
             self.updatezerorev('BMI', 'Dispute Review', 'Action_Reason', False, 'GRT Escalate')
             self.updatezerorev('PCI', 'Dispute Review', 'Action_Reason', False, 'GRT Escalate')
 
-            self.asql.execute("drop table mydisputes")
-
             del myobj
         else:
             self.asql.execute('''
@@ -1184,6 +1189,9 @@ class BMIPCI:
                 WHERE
                     Error_Columns is null
             ''')
+
+        if self.asql.query("select object_id('mydisputes')").iloc[0, 0]:
+            self.asql.execute("drop table mydisputes")
 
         processresults(self.folder_name, self.asql, 'mytbl', self.action)
 
@@ -1259,8 +1267,6 @@ class BMIPCI:
             self.updatezerorev('BMI', 'Dispute Review', None, False, 'GRT Paid')
             self.updatezerorev('PCI', 'Dispute Review', None, False, 'GRT Paid')
 
-            self.asql.execute("drop table mydisputes")
-
             del myobj
         else:
             self.asql.execute('''
@@ -1275,6 +1281,9 @@ class BMIPCI:
                 WHERE
                     A.Error_Columns is null
             ''')
+
+        if self.asql.query("select object_id('mydisputes')").iloc[0, 0]:
+            self.asql.execute("drop table mydisputes")
 
         processresults(self.folder_name, self.asql, 'mytbl', self.action)
 
@@ -1345,8 +1354,6 @@ class BMIPCI:
             self.updatezerorev('BMI', 'Dispute Review', None, False, 'GRT Closed')
             self.updatezerorev('PCI', 'Dispute Review', None, False, 'GRT Closed')
 
-            self.asql.execute("drop table mydisputes")
-
             del myobj
         else:
             self.asql.execute('''
@@ -1361,6 +1368,10 @@ class BMIPCI:
                 WHERE
                     A.Error_Columns is null
             ''')
+
+        if self.asql.query("select object_id('mydisputes')").iloc[0, 0]:
+            self.asql.execute("drop table mydisputes")
+
         processresults(self.folder_name, self.asql, 'mytbl', self.action)
 
     def sendtoaudit(self):

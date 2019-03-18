@@ -229,6 +229,7 @@ def load_settings():
         mysettings = xmlobj.parsexml('./Settings/Network/', mysettings)
         mysettings = xmlobj.parsexml('./Settings/Read_Write_TBL/', mysettings)
         mysettings = xmlobj.parsexml('./Settings/Read_TBL/', mysettings)
+        mysettings = xmlobj.parsexml('./Settings/Other/', mysettings)
 
         mysettings['Seed-Cost_Type'] = \
             xmlobj.parsexml('./Settings/CAT_Workbook/Seed_Disputes/', mysettings)['Cost_Type']
