@@ -652,7 +652,7 @@ class BMIPCI:
                         Error_Columns = 'Source_TBL, Source_ID, Start_Date',
                         Error_Message = 'Valid cost was not found for the Source_TBL, Source_ID, Start_Date combo'
                     
-                    from mytbl
+                    from mytbl A
                     where
                         Error_Columns is null
                 ''')
@@ -1270,6 +1270,43 @@ class BMIPCI:
         writelog("Completed {0} {1} action(s)"
                  .format(len(self.df.index), self.action), 'info')
 
+    def ticketopened(self):
+        self.asql.upload(self.df, 'mytbl')
+
+        validatecol(self.asql, 'mytbl', 'Ticket')
+
+        self.asql.execute('''
+            update A
+            set
+                A.Ticket = case
+                    when Ticket.Ticket_Status_ID is not null then 
+                        concat(cast(Ticket.TICKET_ID as varchar), ' - ', Status.Status)
+                    else A.Ticket
+                end,
+                A.Error_Columns = case
+                    when Ticket.Ticket_Status_ID is null then 'Ticket'
+                    end,
+                A.Error_Message = case
+                    when Ticket.Ticket_Status_ID is null then 'Ticket doesn''t exist in Cornerstone'
+                    end
+            
+            from mytbl As A
+            left join {0} As Ticket
+            on
+                A.Ticket = Ticket.Ticket_ID
+            left join {1} As Status
+            on
+                Ticket.Ticket_Status_ID = Status.Ticket_Status_ID
+            
+            where
+                A.Error_Columns is null
+        '''.format(settings['Ticket_Core'], settings['Ticket_Status']))
+
+        self.updatezerorev('BMI', self.action, 'Ticket')
+        self.updatezerorev('PCI', self.action, 'Ticket')
+
+        processresults(self.folder_name, self.asql, 'mytbl', self.action)
+
     def updateother(self):
         self.asql.upload(self.df, 'mytbl')
 
@@ -1315,6 +1352,8 @@ class BMIPCI:
             self.addclosed()
         elif self.action == 'Send to Audit':
             self.sendtoaudit()
+        elif self.action == 'Ticket Opened':
+            self.ticketopened()
         else:
             self.updateother()
 

@@ -36,38 +36,53 @@ class NonSeeds:
             if self.asql.query("select object_id('DH')").iloc[0, 0]:
                 self.asql.execute("DROP TABLE DH")
 
-            self.asql.execute("CREATE TABLE DSB (DSB_ID int, Stc_Claim_Number varchar(255))")
+            self.asql.execute("CREATE TABLE DSB (DSB_ID int, Stc_Claim_Number varchar(255), BanMaster_ID int)")
             self.asql.execute("CREATE TABLE DS (DS_ID int, DSB_ID int, Rep varchar(100), Batch_DT date)")
             self.asql.execute("CREATE TABLE DH (DH_ID int, DSB_ID int, Display_Status varchar(100)"
                               ", Source_File varchar(255))")
             self.asql.execute('''
                 insert into {0}
                 (
+                    Vendor,
+                    Platform,
                     BAN,
                     STC_Claim_Number,
                     Bill_Date,
                     USI,
-                    Dispute_Amount
+                    Dispute_Amount,
+                    BanMaster_ID
                 )
     
                 OUTPUT
                     INSERTED.DSB_ID,
-                    INSERTED.Stc_Claim_Number
+                    INSERTED.Stc_Claim_Number,
+                    INSERTED.BanMaster_ID
     
                 INTO DSB
     
                 select
-                    BAN,
-                    Stc_Claim_Number,
-                    Bill_Date,
-                    USI,
-                    Dispute_Amt
+                    BM.BDT_Vendor,
+                    PM.Platform,
+                    A.BAN,
+                    A.Stc_Claim_Number,
+                    A.Bill_Date,
+                    A.USI,
+                    A.Dispute_Amt,
+                    BM.ID
     
-                from mydisputes
+                from mydisputes A
+                left join {1} BM
+                on
+                    A.BAN = BM.BAN
+                        and
+                    eomonth(A.Bill_Date) between eomonth(BM.Start_Date) and eomonth(isnull(BM.End_Date, getdate()))
+                left join {2} PM
+                on
+                    BM.PlatformMasterID = PM.ID
     
                 where
                     Error_Columns is null;
-            '''.format(settings['Dispute_Staging_Bridge']))
+            '''.format(settings['Dispute_Staging_Bridge'], settings['Ban_Master'], settings['Platform_Master']))
 
             self.asql.execute('''
                 insert into {0}
@@ -96,7 +111,8 @@ class NonSeeds:
                     Short_Paid,
                     Comment,
                     Confidence,
-                    Batch_DT
+                    Batch_DT,
+                    Edit_DT
                 )
     
                 OUTPUT
@@ -132,7 +148,8 @@ class NonSeeds:
                     A.Short_Paid,
                     A.Comment,
                     A.Confidence,
-                    '{2}'
+                    '{2}',
+                    getdate()
     
                 from mydisputes As A
                 inner join {1} As B
@@ -161,7 +178,8 @@ class NonSeeds:
                     Dispute_Reason,
                     GRT_Update_Rep,
                     Date_Updated,
-                    Source_File
+                    Source_File,
+                    Edit_DT
                 )
 
                 OUTPUT
@@ -185,7 +203,8 @@ class NonSeeds:
                     A.Dispute_Reason,
                     B.Full_Name,
                     getdate(),
-                    'GRT Email: ' + format(getdate(),'yyyyMMdd')
+                    'GRT Email: ' + format(getdate(),'yyyyMMdd'),
+                    getdate()
 
                 from mydisputes As A
                 inner join {1} As B
@@ -205,6 +224,11 @@ class NonSeeds:
                 insert into {0}
                 (
                     DSB_ID,
+                    Dispute_Type,
+                    Norm_Vendor,
+                    Vendor,
+                    Norm_Platform,
+                    Platform,
                     State,
                     BAN,
                     Bill_Date,
@@ -229,6 +253,11 @@ class NonSeeds:
                 )
                 select
                     DSB.DSB_ID,
+                    A.Dispute_Type,
+                    VM.Vendor,
+                    BM.BDT_Vendor,
+                    PM.Platform,
+                    PM.Platform,
                     A.State,
                     A.BAN,
                     A.Bill_Date,
@@ -252,7 +281,7 @@ class NonSeeds:
                     DS.Batch_DT,
                     getdate(),
                     DH.Source_File,
-                    DSB.DH_ID
+                    DH.DH_ID
 
                 from DSB
                 inner join DS
@@ -264,7 +293,17 @@ class NonSeeds:
                 left join DH
                 on
                     DSB.DSB_ID = DH.DSB_ID
-            '''.format(settings['Dispute_Current']))
+                left join {1} BM
+                on
+                    DSB.BanMaster_ID = BM.ID
+                left join {2} PM
+                on
+                    BM.PlatformMasterID = PM.ID
+                left join {3} VM
+                on
+                    BM.VendorMasterID = VM.ID
+            '''.format(settings['Dispute_Current'], settings['Ban_Master'], settings['Platform_Master']
+                       , settings['Vendor_Master']))
 
             self.asql.execute('drop table DS, DSB, DH')
 

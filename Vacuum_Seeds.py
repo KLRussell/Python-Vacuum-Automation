@@ -22,9 +22,9 @@ class Seeds:
         self.args['DSB_Cols'] = '''Vendor, Platform, BAN, STC_Claim_Number, Bill_Date, USI, Dispute_Amount
             , BanMaster_ID, Source_TBL, Source_ID'''
 
-        self.args['DC_Cols'] = '''DSB_ID, Dispute_Type, Vendor, Platform, State, BAN, Bill_Date, USI, Source_TBL, Source_ID, STC_Claim_Number
-            , #_Of_Escalations, Status, Display_Status, Date_Submitted, Norm_Dispute_Category
-            , Dispute_Category, Audit_Type, Disputer, Comment, Dispute_Amount, Dispute_Reason
+        self.args['DC_Cols'] = '''DSB_ID, Dispute_Type, Vendor, Platform, State, BAN, Bill_Date, USI, Source_TBL
+            , Source_ID, STC_Claim_Number, #_Of_Escalations, Status, Display_Status, Date_Submitted
+            , Norm_Dispute_Category, Dispute_Category, Audit_Type, Disputer, Comment, Dispute_Amount, Dispute_Reason
             , Date_Updated, Batch, Edit_Date, Source_File, DH_ID
         '''
 
@@ -36,23 +36,27 @@ class Seeds:
             , getdate(), DS.Batch_DT, getdate(), DH.Source_File, DH.DH_ID
                     '''
             self.args['email'] = "A.Source_TBL = 'PCI'"
-            self.args['DSB_Sel'] = '''Vendor, Platform, BAN, '{0}_' + left(Record_Type,1) + cast(Seed as varchar)
-                        , Bill_Date, USI, Dispute_Amt, BanMaster_ID, Source_TBL, Source_ID'''.format(getbatch())
+            self.args['DSB_Sel'] = '''case when A.Vendor is not null then A.Vendor else BM.BDT_Vendor end
+                , case when A.Platform is not null then A.Platform else PM.Platform end, A.BAN
+                , '{0}_' + left(A.Record_Type,1) + cast(A.Seed as varchar), A.Bill_Date, A.USI, A.Dispute_Amt
+                , case when A.BanMaster_ID is not null then A.BanMaster_ID else BM.ID end, A.Source_TBL, A.Source_ID
+                '''.format(getbatch())
             self.args['DSB_On'] = '''
                         DSB.Stc_Claim_Number='{0}_' + left(A.Record_Type,1) + cast(A.Seed as varchar)
                         '''.format(getbatch())
             self.args['DS_Cols'] = '''DSB_ID, Rep, Dispute_Type, Cost_Type, Cost_Type_Seed, State, USOC, USOC_Desc
                 , CPID,  Record_Type, Dispute_Category, Audit_Type, STC_Claim_Number, Bill_Date, Billed_Amt
-                , Claimed_Amt, Dispute_Reason, Billed_Phrase_Code, Causing_SO, PON, Comment, Confidence, Batch_DT'''
+                , Claimed_Amt, Dispute_Reason, Billed_Phrase_Code, Causing_SO, PON, Comment, Confidence, Batch_DT
+                ,Edit_DT'''
             self.args['DS_Sel'] = '''DSB.DSB_ID, B.Full_Name, A.Claim_Channel, A.Cost_Type, A.Seed, A.State, A.USOC
                 , A.USOC_Desc, CPID, A.Record_Type, 'GRT CNR', 'CNR Audit'
                 , '{0}_' + left(A.Record_Type,1) + cast(A.Seed as varchar), A.Bill_Date, A.Billed_Amt, A.Dispute_Amt
-                , A.Action_Reason, A.Phrase_Code, A.Causing_SO, A.PON, A.Action_Comment, A.Confidence, '{1}'
+                , A.Action_Reason, A.Phrase_Code, A.Causing_SO, A.PON, A.Action_Comment, A.Confidence, '{1}', getdate()
                 '''.format(getbatch(), getbatch(True))
             self.args['DH_Cols'] = '''DSB_ID, Dispute_Category, Display_Status, Date_Submitted, Dispute_Reason
-                , GRT_Update_Rep, Date_Updated, Source_File'''
+                , GRT_Update_Rep, Date_Updated, Source_File, Edit_DT'''
             self.args['DH_Sel'] = '''DSB.DSB_ID, 'GRT CNR', 'Filed', getdate(), A.Action_Reason, B.Full_Name
-                , getdate(), 'GRT Status: ' + format(getdate(),'yyyyMMdd')'''
+                , getdate(), 'GRT Status: ' + format(getdate(),'yyyyMMdd'), getdate()'''
             self.args['DH_Whr'] = "A.Claim_Channel = 'Email'"
             self.args['email2'] = "A.Claim_Channel = 'Email'"
         else:
@@ -60,32 +64,36 @@ class Seeds:
                 , A.USI, A.Source_TBL, A.Source_ID, DSB.STC_Claim_Number, 0, 'Open'
                 , case when DH.Display_Status is not null then DH.Display_Status else 'Pending Review' end
                 , getdate(), A.Dispute_Category, A.Dispute_Category, A.Audit_Type, DS.Rep, DS.Comment, A.Dispute_Amt
-                , DS.Dispute_Reason, getdate(), DS.Batch_DT, getdate(), DH.Source_File, DSB.DH_ID
+                , DS.Dispute_Reason, getdate(), DS.Batch_DT, getdate(), DH.Source_File, DH.DH_ID
                     '''
             self.args['email'] = "A.Dispute_Status = case when A.Dispute_Status is not null then A.Dispute_Status " \
                                  "else 'Filed' end"
             self.args['email2'] = "A.Dispute_Type = 'Email'"
-            self.args['DSB_Sel'] = '''Vendor, Platform, BAN, '{0}_' + left(Record_Type,1) + cast(Cost_Type_Seed as varchar)
-                        , Bill_Date, USI, Dispute_Amt, BanMaster_ID, Source_TBL, Source_ID'''.format(getbatch())
+            self.args['DSB_Sel'] = '''case when A.Vendor is not null then A.Vendor else BM.BDT_Vendor end
+                , case when A.Platform is not null then A.Platform else PM.Platform end, A.BAN
+                , '{0}_' + left(A.Record_Type,1) + cast(A.Cost_Type_Seed as varchar), A.Bill_Date, A.USI, A.Dispute_Amt
+                , case when A.BanMaster_ID is not null then A.BanMaster_ID else BM.ID end, A.Source_TBL, A.Source_ID
+                '''.format(getbatch())
             self.args['DSB_On'] = '''
-                        DSB.Stc_Claim_Number='{0}_' + left(A.Record_Type,1) + cast(A.Cost_Type_Seed as varchar)
-                        '''.format(getbatch())
+                DSB.Stc_Claim_Number='{0}_' + left(A.Record_Type,1) + cast(A.Cost_Type_Seed as varchar)
+                '''.format(getbatch())
             self.args['DS_Cols'] = '''DSB_ID, Rep, Dispute_Type, Cost_Type, Cost_Type_Seed, State, USOC, USOC_Desc
             , CPID, Record_Type, Dispute_Category, Audit_Type, STC_Claim_Number, Bill_Date, Billed_Amt
             , Claimed_Amt, Dispute_Reason, Billed_Phrase_Code, Causing_SO, PON, CLLI, Usage_Rate, MOU, Jurisdiction
-            , Short_Paid, Comment, Confidence, Batch_DT'''
+            , Short_Paid, Comment, Confidence, Batch_DT, Edit_DT'''
             self.args['DS_Sel'] = '''DSB.DSB_ID, B.Full_Name, A.Dispute_Type, A.Cost_Type, A.Cost_Type_Seed, A.State
             , A.USOC, A.USOC_Desc, A.CPID, A.Record_Type, A.Dispute_Category, A.Audit_Type
             , '{0}_' + left(A.Record_Type,1) + cast(A.Cost_Type_Seed as varchar), A.Bill_Date, A.Billed_Amt
             , A.Dispute_Amt, A.Dispute_Reason, A.Phrase_Code, A.Causing_SO, A.PON, A.CLLI, A.Usage_Rate, A.MOU
-            , A.Jurisdiction, A.Short_Paid, A.Comment, A.Confidence, '{1}'
+            , A.Jurisdiction, A.Short_Paid, A.Comment, A.Confidence, '{1}', getdate()
             '''.format(getbatch(), getbatch(True))
             self.args['DH_Cols'] = '''DSB_ID, Dispute_Category, Display_Status, Date_Submitted, Dispute_Reason
                 , ILEC_Confirmation, ILEC_Comments, Credit_Approved, Credit_Received_Amount
-                , Credit_Received_Invoice_Date, GRT_Update_Rep, Date_Updated, Source_File'''
+                , Credit_Received_Invoice_Date, GRT_Update_Rep, Date_Updated, Source_File, Edit_DT'''
             self.args['DH_Sel'] = '''DSB.DSB_ID, A.Dispute_Category, A.Dispute_Status, getdate()
                 , A.Dispute_Reason, A.ILEC_Confirmation, A.ILEC_Comment, A.Approved_Amt, A.Received_Amt
-                , A.Received_Invoice_Date, B.Full_Name, getdate(), 'GRT Status: ' + format(getdate(),'yyyyMMdd')'''
+                , A.Received_Invoice_Date, B.Full_Name, getdate(), 'GRT Status: ' + format(getdate(),'yyyyMMdd')
+                , getdate()'''
             self.args['DH_Whr'] = "A.Dispute_Type = 'Email' and A.Dispute_Status is null"
 
             self.df = defaultheader(self.df, '''dispute_type, cost_type, cost_type_seed, dispute_category, audit_type
@@ -107,7 +115,7 @@ class Seeds:
             if self.asql.query("select object_id('DH')").iloc[0, 0]:
                 self.asql.execute("DROP TABLE DH")
 
-            self.asql.execute("CREATE TABLE DSB (DSB_ID int, Stc_Claim_Number varchar(255))")
+            self.asql.execute("CREATE TABLE DSB (DSB_ID int, Stc_Claim_Number varchar(255), BanMaster_ID int)")
             self.asql.execute("CREATE TABLE DS (DS_ID int, DSB_ID int, Dispute_Type varchar(10)"
                               ", Rep varchar(100), Comment varchar(max), Dispute_Reason varchar(max), Batch_DT date)")
             self.asql.execute("CREATE TABLE DH (DH_ID int, DSB_ID int, Display_Status varchar(100)"
@@ -133,18 +141,28 @@ class Seeds:
 
                 OUTPUT
                     INSERTED.DSB_ID,
-                    INSERTED.Stc_Claim_Number
+                    INSERTED.Stc_Claim_Number,
+                    INSERTED.BanMaster_ID
 
                 INTO DSB
 
                 select
                     {2}
 
-                from myseeds
+                from myseeds A
+                left join {3} BM
+                on
+                    A.BAN = BM.BAN
+                        and
+                    eomonth(A.Bill_Date) between eomonth(BM.Start_Date) and eomonth(isnull(BM.End_Date, getdate()))
+                left join {4} PM
+                on
+                    BM.PlatformMasterID = PM.ID
                 
                 where
-                    Error_Columns is null;'''.format(settings['Dispute_Staging_Bridge']
-                                                     , self.args['DSB_Cols'], self.args['DSB_Sel']))
+                    Error_Columns is null;'''.format(settings['Dispute_Staging_Bridge'], self.args['DSB_Cols']
+                                                     , self.args['DSB_Sel'], settings['Ban_Master']
+                                                     , settings['Platform_Master']))
 
             self.asql.execute('''
                 insert into {0}
@@ -214,10 +232,14 @@ class Seeds:
             self.asql.execute('''
                 insert into {0}
                 (
-                    {1}
+                    {1},
+                    Norm_Vendor,
+                    Norm_Platform
                 )
                 select
-                    {2}
+                    {2},
+                    VM.Vendor,
+                    PM.Platform
 
                 from DSB
                 inner join DS
@@ -229,7 +251,17 @@ class Seeds:
                 left join DH
                 on
                     DSB.DSB_ID = DH.DSB_ID
-            '''.format(settings['Dispute_Current'], self.args['DC_Cols'], self.args['DC_Sel'], self.args['DSB_On']))
+                left join {4} BM
+                on
+                    DSB.BanMaster_ID = BM.ID
+                left join {5} PM
+                on
+                    BM.PlatformMasterID = PM.ID
+                left join {6} VM
+                on
+                    BM.VendorMasterID = VM.ID
+            '''.format(settings['Dispute_Current'], self.args['DC_Cols'], self.args['DC_Sel'], self.args['DSB_On']
+                       , settings['Ban_Master'], settings['Platform_Master'], settings['Vendor_Master']))
 
             self.asql.execute('drop table DS, DSB, DH')
 
@@ -282,9 +314,10 @@ class Seeds:
                     A.Billed_Amt=B.{0},
                     A.dispute_amt=isnull(A.dispute_amt,B.{0}),
                     A.USI=CASE
-                        WHEN B.WTN is not null THEN B.WTN
-                        WHEN B.Circuit_ID is not null THEN B.Circuit_ID
-                        WHEN B.BTN is not null THEN B.BTN
+                        when isnull(A.USI,'') != '' then A.USI
+                        WHEN isnull(B.WTN,'') != '' THEN B.WTN
+                        WHEN isnull(B.Circuit_ID,'') != '' THEN B.Circuit_ID
+                        WHEN isnull(B.BTN,'') != '' THEN B.BTN
                     END,
                     A.Source_TBL=isnull(A.Source_TBL, 'PCI'),
                     A.Source_ID=isnull(A.Source_ID, B.PCI_ID)
@@ -310,9 +343,10 @@ class Seeds:
                     A.Source_TBL=isnull(A.Source_TBL, 'BMI'),
                     A.Source_ID=isnull(A.Source_ID, B.BMI_ID),
                     A.USI=CASE
-                        WHEN B.WTN is not null THEN B.WTN
-                        WHEN B.Circuit_ID is not null THEN B.Circuit_ID
-                        WHEN B.BTN is not null THEN B.BTN
+                        when isnull(A.USI,'') != '' then A.USI
+                        WHEN isnull(B.WTN,'') != '' THEN B.WTN
+                        WHEN isnull(B.Circuit_ID,'') != '' THEN B.Circuit_ID
+                        WHEN isnull(B.BTN,'') != '' THEN B.BTN
                     END,
                     A.CPID = C.CPID,
                     A.BANMaster_ID = C.BANMasterID
@@ -335,6 +369,11 @@ class Seeds:
                         when A.USOC is not null then A.USOC
                         else B.USOC
                     end,
+                    A.USI=case
+                        when isnull(A.USI,'') != '' then A.USI
+                        WHEN isnull(B.BTN,'') != '' THEN B.BTN
+                        WHEN isnull(B.Circuit_ID,'') != '' THEN B.Circuit_ID
+                    END,
                     A.USOC_Desc=case
                         when A.USOC_Desc is not null then A.USOC_Desc
                         else B.USOC_Description
@@ -379,7 +418,7 @@ class Seeds:
                     A.State=B.State,
                     A.Billed_Amt=B.Amount,
                     A.dispute_amt=isnull(A.dispute_amt,B.Amount),
-                    A.USI=case when A.USI is not null then A.USI else B.BTN end,
+                    A.USI=case when isnull(A.USI,'') != '' then A.USI else B.BTN end,
                     A.Usage_Rate=case
                         when A.Usage_Rate is not null then A.Usage_Rate
                         else B.Usage_Rate
