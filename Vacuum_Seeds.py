@@ -35,7 +35,7 @@ class Seeds:
                 , getdate(), DS.Batch_DT, getdate(), DH.Source_File, DH.DH_ID
                     '''
             self.args['email'] = "A.Source_TBL = 'PCI'"
-            self.args['DSB_Sel'] = '''B.Full_Name, A.Claim_Channel, A.Dispute_Category, getdate()
+            self.args['DSB_Sel'] = '''B.Full_Name, A.Claim_Channel, 'GRT CNR', getdate()
                 , case when A.Vendor is not null then A.Vendor else BM.BDT_Vendor end
                 , case when A.Platform is not null then A.Platform else PM.Platform end, A.BAN
                 , '{0}_' + left(A.Record_Type,1) + cast(A.Seed as varchar), A.Bill_Date, A.USI, A.Dispute_Amt
