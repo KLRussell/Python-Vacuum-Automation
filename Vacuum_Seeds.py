@@ -31,7 +31,7 @@ class Seeds:
         if self.df.empty:
             self.args['DC_Sel'] = '''DSB.DSB_ID, DSB.Dispute_Type, A.Vendor, A.Platform, A.State, A.BAN, A.Bill_Date
                 , A.USI, A.Source_TBL, A.Source_ID, DSB.STC_Claim_Number, 0, 'Open', DH.Display_Status, getdate()
-                , 'GRT CNR', 'GRT CNR', 'CNR Audit', DSB.Disputer, DS.Comment, A.Dispute_Amt, DS.Dispute_Reason
+                , 'GRT CNR', 'GRT CNR', 'CNR Audit', DSB.Disputer, DS.Comment, A.Dispute_Amt, A.Action_Reason
                 , getdate(), DS.Batch_DT, getdate(), DH.Source_File, DH.DH_ID
                     '''
             self.args['email'] = "A.Source_TBL = 'PCI'"
@@ -61,7 +61,7 @@ class Seeds:
             self.args['DC_Sel'] = '''DSB.DSB_ID, DSB.Dispute_Type, A.Vendor, A.Platform, A.State, A.BAN, A.Bill_Date
                 , A.USI, A.Source_TBL, A.Source_ID, DSB.STC_Claim_Number, 0, 'Open', DH.Display_Status, getdate()
                 , A.Dispute_Category, A.Dispute_Category, A.Audit_Type, DSB.Disputer, DS.Comment, A.Dispute_Amt
-                , DS.Dispute_Reason, getdate(), DS.Batch_DT, getdate(), DH.Source_File, DH.DH_ID
+                , A.Dispute_Reason, getdate(), DS.Batch_DT, getdate(), DH.Source_File, DH.DH_ID
                     '''
             self.args['email'] = "A.Dispute_Status = case when A.Dispute_Status is not null then A.Dispute_Status " \
                                  "else 'Filed' end"
@@ -115,7 +115,7 @@ class Seeds:
             self.asql.execute("CREATE TABLE DSB (DSB_ID int, Stc_Claim_Number varchar(255), BanMaster_ID int"
                               ", Dispute_Type varchar(10), Disputer varchar(100))")
             self.asql.execute("CREATE TABLE DS (DS_ID int, DSB_ID int"
-                              ", Comment varchar(max), Dispute_Reason varchar(max), Batch_DT date)")
+                              ", Comment varchar(max), Batch_DT date)")
             self.asql.execute("CREATE TABLE DH (DH_ID int, DSB_ID int, Display_Status varchar(100)"
                               ", Source_File varchar(255))")
 
@@ -177,7 +177,6 @@ class Seeds:
                     INSERTED.DS_ID,
                     INSERTED.DSB_ID,
                     INSERTED.Comment,
-                    INSERTED.Dispute_Reason,
                     INSERTED.Batch_DT
 
                 INTO DS
@@ -234,7 +233,7 @@ class Seeds:
                 inner join {0} B
                 on
                     A.DSB_ID = B.DSB_ID
-            '''.format(settings['Dispute_History']))
+            '''.format(settings['Dispute_Staging_Bridge']))
 
             self.asql.execute('''
                 insert into {0}

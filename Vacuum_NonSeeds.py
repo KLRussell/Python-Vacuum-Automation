@@ -228,7 +228,7 @@ class NonSeeds:
                 inner join {0} B
                 on
                     A.DSB_ID = B.DSB_ID
-            '''.format(settings['Dispute_History']))
+            '''.format(settings['Dispute_Staging_Bridge']))
 
             self.asql.execute('''
                 insert into {0}
