@@ -22,7 +22,6 @@ class NonSeeds:
 
         self.df['Stc_Claim_Number'] = df['Stc_Claim_Number']\
             .map(lambda x: "{0}_X{1}".format(getbatch(), random.randint(10000000, 10000000000)))
-    # df['stc_claim_number'] = "{0}_X{1}".format(getbatch(), random.randint(10000000, 10000000000))
 
     def appenddisputes(self):
         if self.asql.query("select object_id('mydisputes')").iloc[0, 0]\
@@ -36,13 +35,17 @@ class NonSeeds:
             if self.asql.query("select object_id('DH')").iloc[0, 0]:
                 self.asql.execute("DROP TABLE DH")
 
-            self.asql.execute("CREATE TABLE DSB (DSB_ID int, Stc_Claim_Number varchar(255), BanMaster_ID int)")
-            self.asql.execute("CREATE TABLE DS (DS_ID int, DSB_ID int, Rep varchar(100), Batch_DT date)")
+            self.asql.execute("CREATE TABLE DSB (DSB_ID int, Stc_Claim_Number varchar(255), BanMaster_ID int"
+                              ", Disputer varchar(100))")
+            self.asql.execute("CREATE TABLE DS (DS_ID int, DSB_ID int, Batch_DT date)")
             self.asql.execute("CREATE TABLE DH (DH_ID int, DSB_ID int, Display_Status varchar(100)"
                               ", Source_File varchar(255))")
             self.asql.execute('''
                 insert into {0}
                 (
+                    Disputer,
+                    Dispute_Type,
+                    Norm_Dispute_Category,
                     Vendor,
                     Platform,
                     BAN,
@@ -56,11 +59,15 @@ class NonSeeds:
                 OUTPUT
                     INSERTED.DSB_ID,
                     INSERTED.Stc_Claim_Number,
-                    INSERTED.BanMaster_ID
+                    INSERTED.BanMaster_ID,
+                    INSERTED.Disputer
     
                 INTO DSB
     
                 select
+                    B.Full_Name,
+                    A.Dispute_Type,
+                    A.Dispute_Category,
                     BM.BDT_Vendor,
                     PM.Platform,
                     A.BAN,
@@ -71,6 +78,9 @@ class NonSeeds:
                     BM.ID
     
                 from mydisputes A
+                inner join {3} As B
+                on
+                    A.Comp_Serial = B.Comp_Serial
                 left join {1} BM
                 on
                     A.BAN = BM.BAN
@@ -82,19 +92,17 @@ class NonSeeds:
     
                 where
                     Error_Columns is null;
-            '''.format(settings['Dispute_Staging_Bridge'], settings['Ban_Master'], settings['Platform_Master']))
+            '''.format(settings['Dispute_Staging_Bridge'], settings['Ban_Master'], settings['Platform_Master']
+                       , settings['CAT_Emp']))
 
             self.asql.execute('''
                 insert into {0}
                 (
                     DSB_ID,
-                    Rep,
-                    Dispute_Type,
                     State,
                     USOC,
                     USOC_Desc,
                     Record_Type,
-                    Dispute_Category,
                     Audit_Type,
                     STC_Claim_Number,
                     Bill_Date,
@@ -118,20 +126,16 @@ class NonSeeds:
                 OUTPUT
                     INSERTED.DS_ID,
                     INSERTED.DSB_ID,
-                    INSERTED.Rep,
                     INSERTED.Batch_DT
     
                 INTO DS
     
                 select
                     DSB.DSB_ID,
-                    B.Full_Name,
-                    A.Dispute_Type,
                     A.State,
                     A.USOC,
                     A.USOC_Desc,
                     A.Record_Type,
-                    A.Dispute_Category,
                     A.Audit_Type,
                     A.STC_Claim_Number,
                     A.Bill_Date,
@@ -148,20 +152,17 @@ class NonSeeds:
                     A.Short_Paid,
                     A.Comment,
                     A.Confidence,
-                    '{2}',
+                    '{1}',
                     getdate()
     
                 from mydisputes As A
-                inner join {1} As B
-                on
-                    A.Comp_Serial = B.Comp_Serial
                 inner join DSB
                 on
                     DSB.STC_Claim_Number = A.STC_Claim_Number
     
                 where
                     A.Error_Columns is null
-            '''.format(settings['DisputeStaging'], settings['CAT_Emp'], getbatch(True)))
+            '''.format(settings['DisputeStaging'], getbatch(True)))
 
             self.asql.execute('''
                 insert into {0}
@@ -273,7 +274,7 @@ class NonSeeds:
                     A.Dispute_Category,
                     A.Dispute_Category,
                     A.Audit_Type,
-                    DS.Rep,
+                    DSB.Disputer,
                     A.Comment,
                     A.Dispute_Amt,
                     A.Dispute_Reason,
