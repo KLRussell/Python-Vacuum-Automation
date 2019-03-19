@@ -53,7 +53,8 @@ class NonSeeds:
                     Bill_Date,
                     USI,
                     Dispute_Amount,
-                    BanMaster_ID
+                    BanMaster_ID,
+                    Edit_DT
                 )
     
                 OUTPUT
@@ -75,7 +76,8 @@ class NonSeeds:
                     A.Bill_Date,
                     A.USI,
                     A.Dispute_Amt,
-                    BM.ID
+                    BM.ID,
+                    getdate()
     
                 from mydisputes A
                 inner join {3} As B
@@ -104,11 +106,8 @@ class NonSeeds:
                     USOC_Desc,
                     Record_Type,
                     Audit_Type,
-                    STC_Claim_Number,
-                    Bill_Date,
                     Billed_Amt,
                     Claimed_Amt,
-                    Dispute_Reason,
                     Billed_Phrase_Code,
                     Causing_SO,
                     PON,
@@ -137,11 +136,8 @@ class NonSeeds:
                     A.USOC_Desc,
                     A.Record_Type,
                     A.Audit_Type,
-                    A.STC_Claim_Number,
-                    A.Bill_Date,
                     A.Billed_Amt,
                     A.Dispute_Amt,
-                    A.Dispute_Reason,
                     A.Phrase_Code,
                     A.Causing_SO,
                     A.PON,
@@ -194,7 +190,11 @@ class NonSeeds:
                 select
                     DSB.DSB_ID,
                     A.Dispute_Category,
-                    isnull(A.Dispute_Status,'Filed'),
+                    case
+                        when A.Dispute_Status is not null then A.Dispute_Status
+                        when A.Dispute_Type = 'Email' then 'Filed'
+                        else 'Pending Review'
+                    end,
                     cast(getdate() as date),
                     A.ILEC_Confirmation,
                     A.ILEC_Comment,
@@ -204,7 +204,7 @@ class NonSeeds:
                     A.Dispute_Reason,
                     B.Full_Name,
                     getdate(),
-                    'GRT Email: ' + format(getdate(),'yyyyMMdd'),
+                    'GRT Status: ' + format(getdate(),'yyyyMMdd'),
                     getdate()
 
                 from mydisputes As A
@@ -217,9 +217,18 @@ class NonSeeds:
                     
                 where
                     A.Error_Columns is null
-                        and
-                    A.Dispute_Type = 'Email'
             '''.format(settings['Dispute_History'], settings['CAT_Emp']))
+
+            self.asql.execute('''
+                update B
+                set
+                    B.Orig_DH_ID = A.DH_ID
+
+                from DH A
+                inner join {0} B
+                on
+                    A.DSB_ID = B.DSB_ID
+            '''.format(settings['Dispute_History']))
 
             self.asql.execute('''
                 insert into {0}
@@ -266,10 +275,7 @@ class NonSeeds:
                     A.STC_Claim_Number,
                     0,
                     'Open',
-                    case
-                        when DH.Display_Status is not null then DH.Display_Status
-                        else 'Pending Review'
-                    end,
+                    DH.Display_Status,
                     getdate(),
                     A.Dispute_Category,
                     A.Dispute_Category,
