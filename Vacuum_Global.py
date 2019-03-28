@@ -215,6 +215,7 @@ def load_settings():
     mysettings['EventLogDir'] = mysettings['SourceDir'] + "\\02_Event_Log"
     mysettings['SourceCodeDir'] = mysettings['SourceDir'] + "\\03_Source_Code"
     mysettings['ErrorsDir'] = mysettings['SourceDir'] + "\\01_Updates\\06_Errors"
+    mysettings['Vacuum_Talk'] = mysettings['SourceDir'] + "\\Vacuum_Talk.txt"
 
     updatesdir.append(mysettings['SourceDir'] + "\\01_Updates\\01_BMI-PCI")
     updatesdir.append(mysettings['SourceDir'] + "\\01_Updates\\02_Seeds")

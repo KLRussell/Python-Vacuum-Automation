@@ -29,18 +29,33 @@ def myexithandler():
     gc.collect()
 
 
+def generatetalk():
+    f = open(settings['Vacuum_Talk'], 'r')
+    lines = f.readlines()
+    talkid = random.randint(0, len(lines))
+
+    print(lines[talkid])
+
+    f.close()
+
+
+
 def process_errors():
+    clogged = False
     df = pd.DataFrame()
     for dirpath in settings['UpdatesDir']:
         df = get_errors(os.path.basename(dirpath))
         if not df.empty:
+            if not clogged:
+                writelog('Vacuum clogged with Errors. Cleaning vacuum...', 'info')
+                clogged = True
             writelog('Processing {0} items from Error virtual list'.format(len(df.index)))
             for serial in df['Comp_Serial'].unique():
                 if not os.path.exists(settings['ErrorsDir'] + '//{}'.format(serial)):
                     os.makedirs(settings['ErrorsDir'] + '//{}'.format(serial))
 
-                myobj = XMLAppendClass(settings['ErrorsDir'] + '//{0}_E{1}.xml'.format(
-                    datetime.datetime.now().__format__("%Y%m%d"), random.randint(10000000, 10000000000)))
+                myobj = XMLAppendClass(settings['ErrorsDir'] + '//{0}//{1}_E{2}.xml'.format(
+                    serial, datetime.datetime.now().__format__("%Y%m%d"), random.randint(10000000, 10000000000)))
                 myobj.write_xml(df[df['Comp_Serial'] == serial])
     del df
 
@@ -114,6 +129,7 @@ if __name__ == '__main__':
 
     while 1 != 0:
         Has_Updates = None
+        writelog('Vacuum sniffing floor for crumbs...', 'info')
 
         while Has_Updates is None:
             Has_Updates = check_for_updates()
@@ -121,8 +137,9 @@ if __name__ == '__main__':
 
             if continue_flag:
                 writelog('', 'info')
-                writelog('Vacuum sniffing floor for crumbs...', 'info')
                 continue_flag = False
+            elif random.randint(1, 10000000000) % 77777 == 0:
+                generatetalk()
 
         process_updates(Has_Updates)
         process_errors()
