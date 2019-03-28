@@ -2,13 +2,14 @@ from time import sleep
 from datetime import datetime
 from PyQt5 import QtWidgets
 from Vacuum_Global import XMLParseClass
+from Vacuum_Global import XMLAppendClass
 from Vacuum_Global import settings
 from Vacuum_Global import get_errors
 from Vacuum_Global import writelog
 from Vacuum_Global import log_filepath
 from Vacuum_BMIPCI import BMIPCI
 from Vacuum_DisputeActions import DisputeActions
-from Vacuum_NewUser import NewUser
+from Vacuum_NewUser import newuser
 from Vacuum_NonSeeds import NonSeeds
 from Vacuum_Seeds import Seeds
 
@@ -17,12 +18,15 @@ import pathlib as pl
 import os
 import gc
 import sys
+import random
+import datetime
 
 gc.collect()
 
 
 def myexithandler():
     writelog('Exiting Vacuum...', 'warning')
+    gc.collect()
 
 
 def process_errors():
@@ -31,7 +35,13 @@ def process_errors():
         df = get_errors(os.path.basename(dirpath))
         if not df.empty:
             writelog('Processing {0} items from Error virtual list'.format(len(df.index)))
-            print(df[['Source_TBL', 'Source_ID','Error_Message']])
+            for serial in df['Comp_Serial'].unique():
+                if not os.path.exists(settings['ErrorsDir'] + '//{}'.format(serial)):
+                    os.makedirs(settings['ErrorsDir'] + '//{}'.format(serial))
+
+                myobj = XMLAppendClass(settings['ErrorsDir'] + '//{0}_E{1}.xml'.format(
+                    datetime.datetime.now().__format__("%Y%m%d"), random.randint(10000000, 10000000000)))
+                myobj.write_xml(df[df['Comp_Serial'] == serial])
     del df
 
 
@@ -46,7 +56,6 @@ def process_updates(files):
     writeblank = False
 
     for file in files:
-        upload_date = datetime.now()
         folder_name = os.path.basename(os.path.dirname(file))
 
         if writeblank:
@@ -56,7 +65,7 @@ def process_updates(files):
         writelog("", 'info')
 
         if folder_name == '05_New_User':
-            NewUser(file, upload_date)
+            newuser(file)
         else:
             xmlobj = XMLParseClass(file)
 
@@ -88,9 +97,9 @@ def process_updates(files):
                             myobj.process()
                 del parsed
             del xmlobj
-        del upload_date, folder_name
+        del folder_name
         writeblank = True
-        # os.remove(file)
+        os.remove(file)
 
 
 app = QtWidgets.QApplication(sys.argv).instance()
@@ -103,22 +112,22 @@ if __name__ == '__main__':
     writelog('Starting Vacuum...', 'info')
     continue_flag = False
 
-    # while 1 != 0:
-    Has_Updates = None
+    while 1 != 0:
+        Has_Updates = None
 
-    while Has_Updates is None:
-        Has_Updates = check_for_updates()
-        sleep(1)
+        while Has_Updates is None:
+            Has_Updates = check_for_updates()
+            sleep(1)
 
-        if continue_flag:
-            writelog('', 'info')
-            writelog('Vacuum sniffing floor for crumbs...', 'info')
-            continue_flag = False
+            if continue_flag:
+                writelog('', 'info')
+                writelog('Vacuum sniffing floor for crumbs...', 'info')
+                continue_flag = False
 
-    process_updates(Has_Updates)
-    process_errors()
-    continue_flag = True
+        process_updates(Has_Updates)
+        process_errors()
+        continue_flag = True
 
-    os.system('pause')
+    # os.system('pause')
 
 gc.collect()

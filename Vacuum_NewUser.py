@@ -1,9 +1,13 @@
-from Vacuum_Global import settings
 from Vacuum_Global import SQLConnect
 
 
-class NewUser:
+def newuser(file):
+    data = open(file, "r").read()
 
-    def __init__(self, file, upload_date):
-        self.file = file
-        self.upload_date = upload_date
+    if len(data) > 0:
+        asql = SQLConnect('alch')
+        asql.connect()
+
+        asql.execute(data)
+
+        asql.close()

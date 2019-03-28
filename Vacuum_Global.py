@@ -214,6 +214,7 @@ def load_settings():
     mysettings['SourceDir'] = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
     mysettings['EventLogDir'] = mysettings['SourceDir'] + "\\02_Event_Log"
     mysettings['SourceCodeDir'] = mysettings['SourceDir'] + "\\03_Source_Code"
+    mysettings['ErrorsDir'] = mysettings['SourceDir'] + "\\01_Updates\\06_Errors"
 
     updatesdir.append(mysettings['SourceDir'] + "\\01_Updates\\01_BMI-PCI")
     updatesdir.append(mysettings['SourceDir'] + "\\01_Updates\\02_Seeds")

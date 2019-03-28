@@ -15,10 +15,11 @@ class NonSeeds:
     def __init__(self, df, folder_name):
         self.df = df
         self.folder_name = folder_name
-        self.df = defaultheader(self.df, '''dispute_type, stc_claim_number, record_type, ban, bill_date, billed_amt, dispute_amt
-            , dispute_category, audit_type, confidence, dispute_reason, usi, state, usoc, usoc_desc, pon, phrase_code
-            , causing_so, clli, usage_rate, mou, jurisdiction, short_paid, comment, dispute_status, ilec_confirmation
-            , ilec_comment, approved_amt, received_amt, received_invoice_date, Error_Columns, Error_Message''')
+        self.df = defaultheader(self.df, '''dispute_type, stc_claim_number, record_type, ban, bill_date, billed_amt
+            , dispute_amt, dispute_category, audit_type, confidence, dispute_reason, usi, state, usoc, usoc_desc, pon
+            , phrase_code, causing_so, clli, usage_rate, mou, jurisdiction, short_paid, comment, dispute_status
+            , ilec_confirmation, ilec_comment, approved_amt, received_amt, received_invoice_date, Error_Columns
+            , Error_Message''')
 
         self.df['Stc_Claim_Number'] = df['Stc_Claim_Number']\
             .map(lambda x: "{0}_X{1}".format(getbatch(), random.randint(10000000, 10000000000)))
