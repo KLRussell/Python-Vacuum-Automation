@@ -103,6 +103,12 @@ class DisputeActions:
                 B.Last_GRT_Action_Rep = C.Full_Name,
                 B.Date_Updated = getdate(),
                 B.Source_File = 'GRT Status: {2}',
+                B.Norm_Note_Action = NULL,
+                B.Dispute_Note = NULL,
+                B.Note_Group_Tag = NULL,
+                B.Note_Assigned_To = NULL,
+                B.Note_Added_On = NULL,
+                B.Days_Till_Note_Review = NULL,
                 B.DH_ID = DH.DH_ID
 
             FROM mydisputes As A
@@ -212,6 +218,12 @@ class DisputeActions:
                     B.Last_GRT_Action_Rep = C.Full_Name,
                     B.Date_Updated = getdate(),
                     B.Source_File = 'GRT Status: {2}',
+                    B.Norm_Note_Action = NULL,
+                    B.Dispute_Note = NULL,
+                    B.Note_Group_Tag = NULL,
+                    B.Note_Assigned_To = NULL,
+                    B.Note_Added_On = NULL,
+                    B.Days_Till_Note_Review = NULL,
                     B.DH_ID = DH.DH_ID
 
             FROM mydisputes As A
@@ -333,6 +345,12 @@ class DisputeActions:
                 B.Last_GRT_Action_Rep = C.Full_Name,
                 B.Date_Updated = getdate(),
                 B.Source_File = 'GRT Status: {2}',
+                B.Norm_Note_Action = NULL,
+                B.Dispute_Note = NULL,
+                B.Note_Group_Tag = NULL,
+                B.Note_Assigned_To = NULL,
+                B.Note_Added_On = NULL,
+                B.Days_Till_Note_Review = NULL,
                 B.DH_ID = DH.DH_ID
 
             FROM mydisputes As A
@@ -446,6 +464,12 @@ class DisputeActions:
                 B.Last_GRT_Action_Rep = C.Full_Name,
                 B.Date_Updated = getdate(),
                 B.Source_File = 'GRT Status: {2}',
+                B.Norm_Note_Action = NULL,
+                B.Dispute_Note = NULL,
+                B.Note_Group_Tag = NULL,
+                B.Note_Assigned_To = NULL,
+                B.Note_Added_On = NULL,
+                B.Days_Till_Note_Review = NULL,
                 B.DH_ID = DH.DH_ID
 
             FROM mydisputes As A
@@ -564,6 +588,12 @@ class DisputeActions:
                 B.Last_GRT_Action_Rep = C.Full_Name,
                 B.Date_Updated = getdate(),
                 B.Source_File = 'GRT Status: {2}',
+                B.Norm_Note_Action = NULL,
+                B.Dispute_Note = NULL,
+                B.Note_Group_Tag = NULL,
+                B.Note_Assigned_To = NULL,
+                B.Note_Added_On = NULL,
+                B.Days_Till_Note_Review = NULL,
                 B.DH_ID = DH.DH_ID
 
             FROM mydisputes As A
