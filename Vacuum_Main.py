@@ -42,12 +42,16 @@ def generatetalk():
 def process_errors():
     clogged = False
     df = pd.DataFrame()
+
     for dirpath in settings['UpdatesDir']:
         df = get_errors(os.path.basename(dirpath))
+        
         if not df.empty:
             if not clogged:
                 writelog('Vacuum clogged with Errors. Cleaning vacuum...', 'info')
+                writelog('', 'info')
                 clogged = True
+
             writelog('Processing {0} items from Error virtual list'.format(len(df.index)))
             for serial in df['Comp_Serial'].unique():
                 if not os.path.exists(settings['ErrorsDir'] + '//{}'.format(serial)):
