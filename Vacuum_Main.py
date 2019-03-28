@@ -32,12 +32,11 @@ def myexithandler():
 def generatetalk():
     f = open(settings['Vacuum_Talk'], 'r')
     lines = f.readlines()
-    talkid = random.randint(0, len(lines))
+    talkid = random.randint(0, len(lines) - 1)
 
     print(lines[talkid])
 
     f.close()
-
 
 
 def process_errors():
@@ -138,7 +137,7 @@ if __name__ == '__main__':
             if continue_flag:
                 writelog('', 'info')
                 continue_flag = False
-            elif random.randint(1, 10000000000) % 77777 == 0:
+            elif random.randint(1, 10000000000) % 777 == 0:
                 generatetalk()
 
         process_updates(Has_Updates)
