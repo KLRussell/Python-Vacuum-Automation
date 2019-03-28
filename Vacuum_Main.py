@@ -45,15 +45,16 @@ def process_errors():
 
     for dirpath in settings['UpdatesDir']:
         df = get_errors(os.path.basename(dirpath))
-        
+
         if not df.empty:
             if not clogged:
-                writelog('Vacuum clogged with Errors. Cleaning vacuum...', 'info')
-                writelog('', 'info')
+                writelog('Vacuum clogged with Errors. Cleaning vacuum...', 'error')
                 clogged = True
 
-            writelog('Processing {0} items from Error virtual list'.format(len(df.index)))
             for serial in df['Comp_Serial'].unique():
+                writelog('Appending {0} item(s) for {1} from Error virtual list'.format(
+                    len(df[df['Comp_Serial'] == serial].index), serial), 'warning')
+
                 if not os.path.exists(settings['ErrorsDir'] + '//{}'.format(serial)):
                     os.makedirs(settings['ErrorsDir'] + '//{}'.format(serial))
 
@@ -137,11 +138,11 @@ if __name__ == '__main__':
         while Has_Updates is None:
             Has_Updates = check_for_updates()
             sleep(1)
-
+            rand = random.randint(1, 10000000000)
             if continue_flag:
                 writelog('', 'info')
                 continue_flag = False
-            elif random.randint(1, 10000000000) % 777 == 0:
+            elif rand % 777 == 0 or rand % 777 == 1:
                 generatetalk()
 
         process_updates(Has_Updates)
