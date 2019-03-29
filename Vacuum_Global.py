@@ -74,9 +74,10 @@ class XMLAppendClass:
         xmlitem = ['  <record>']
 
         for field in row.index:
-            xmlitem \
-                .append('    <var var_name="{0}">{1}</var>' \
-                        .format(field, row[field]))
+            if row[field]:
+                xmlitem \
+                    .append('    <var var_name="{0}">{1}</var>' \
+                            .format(field, row[field]))
 
         xmlitem.append('  </record>')
 
