@@ -69,6 +69,7 @@ def check_for_updates():
     for dirpath in settings['UpdatesDir']:
         files = list(pl.Path(dirpath).glob('*.xml'))
         if files:
+            writelog("Vacuum found crumbs... Switching to max suction" , 'info')
             return files
 
 
