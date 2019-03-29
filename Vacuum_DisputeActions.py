@@ -20,6 +20,8 @@ class DisputeActions:
                 , action_norm_reason, action_reason, assign_rep, note_tag, attachment, ilec_confirmation
                 , error_columns, error_message''')
 
+        self.df['Folder_Name'] = self.folder_name
+
     def escalate(self):
         self.asql.execute('''
             update A

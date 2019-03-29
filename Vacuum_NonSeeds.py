@@ -23,6 +23,7 @@ class NonSeeds:
 
         self.df['Stc_Claim_Number'] = df['Stc_Claim_Number']\
             .map(lambda x: "{0}_X{1}".format(getbatch(), random.randint(10000000, 10000000000)))
+        self.df['Folder_Name'] = self.folder_name
 
     def appenddisputes(self):
         if self.asql.query("select object_id('mydisputes')").iloc[0, 0]\

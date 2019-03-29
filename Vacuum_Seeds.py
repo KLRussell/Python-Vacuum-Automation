@@ -17,6 +17,7 @@ class Seeds:
         self.df = df
         self.setdefaults()
         self.asql = asql
+        self.df['Folder_Name'] = self.folder_name
 
     def setdefaults(self):
         self.args['DSB_Cols'] = '''Disputer, Dispute_Type, Norm_Dispute_Category, Edit_DT, Vendor, Platform, BAN
