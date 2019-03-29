@@ -52,7 +52,7 @@ def process_errors():
                 clogged = True
 
             for serial in df['Comp_Serial'].unique():
-                writelog('Appending {0} item(s) for {1} from Error virtual list'.format(
+                writelog('{0} error(s) appended to {1}''s workbook'.format(
                     len(df[df['Comp_Serial'] == serial].index), serial), 'warning')
 
                 if not os.path.exists(settings['ErrorsDir'] + '//{}'.format(serial)):
