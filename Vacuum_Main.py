@@ -34,7 +34,7 @@ def generatetalk():
     lines = f.readlines()
     talkid = random.randint(0, len(lines) - 1)
 
-    print(lines[talkid])
+    print('The Vacuum: {0}'.format(lines[talkid]))
 
     f.close()
 
@@ -61,6 +61,7 @@ def process_errors():
                 myobj = XMLAppendClass(settings['ErrorsDir'] + '//{0}//{1}_E{2}.xml'.format(
                     serial, datetime.datetime.now().__format__("%Y%m%d"), random.randint(10000000, 10000000000)))
                 myobj.write_xml(df[df['Comp_Serial'] == serial])
+
     del df
 
 
