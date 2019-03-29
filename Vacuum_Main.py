@@ -142,7 +142,7 @@ if __name__ == '__main__':
             if continue_flag:
                 writelog('', 'info')
                 continue_flag = False
-            elif rand % 777 == 0 or rand % 777 == 1:
+            elif rand % 777 == 0:
                 generatetalk()
 
         process_updates(Has_Updates)
