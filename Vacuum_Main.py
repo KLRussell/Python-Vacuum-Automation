@@ -85,7 +85,7 @@ def process_updates(files):
         writelog("Reading file ({0}/{1})".format(folder_name, os.path.basename(file)), 'info')
         writelog("", 'info')
 
-        if folder_name == '05_New_User':
+        if folder_name == '05_New-User':
             newuser(file)
         else:
             xmlobj = XMLParseClass(file)
