@@ -67,7 +67,11 @@ def process_errors():
 
 def check_for_updates():
     for dirpath in settings['UpdatesDir']:
-        files = list(pl.Path(dirpath).glob('*.xml'))
+        if os.path.basename(dirpath) == '05_New-User':
+            files = list(pl.Path(dirpath).glob('*.sql'))
+        else:
+            files = list(pl.Path(dirpath).glob('*.xml'))
+
         if files:
             writelog("Vacuum found crumbs... Switching to max suction" , 'info')
             return files
