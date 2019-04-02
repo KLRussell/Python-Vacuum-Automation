@@ -711,7 +711,7 @@ class BMIPCI:
                 A.Source_ID,
                 A.Comp_Serial,
                 B.Full_Name,
-                'Sent to LV' Action_Norm_Reason,
+                'Sent to Prov' Action_Norm_Reason,
                 A.Action_Reason,
                 '{2}' Amount_Or_Days,
                 getdate() Edit_Date,
@@ -743,7 +743,7 @@ class BMIPCI:
                 )
                     and
                 A.Error_Columns is null
-        '''.format(settings['CAT_Emp'], settings['Dispute_Current'], settings['LV_DN_Duration'])), 'mydisputes')
+        '''.format(settings['CAT_Emp'], settings['Dispute_Current'], settings['Prov_DN_Duration'])), 'mydisputes')
 
         if self.asql.query("select object_id('mydisputes')").iloc[0, 0] \
                 and self.asql.query("select count(*) from mydisputes").iloc[0, 0] > 0:
@@ -1115,6 +1115,18 @@ class BMIPCI:
             '''.format(settings['Dispute_Current'], settings['Dispute_Notes']))
 
         validatecol(self.asql, 'mytbl', 'Amount_Or_Days')
+
+        self.asql.execute('''
+            update A
+            set
+                A.Error_Columns = 'Amount_Or_Days',
+                A.Error_Message = 'DN max day cap is {0} day(s)'
+            
+            from mytbl As A
+            
+            where
+                A.Amount_Or_Days > {0}
+        '''.format(settings['DN_Day_Limit']))
 
         self.asql.upload(self.asql.query('''
             select

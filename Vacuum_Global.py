@@ -254,6 +254,7 @@ def append_errors(folder_name, df):
         if folder_name not in errors:
             errors[folder_name] = []
 
+
         errors[folder_name].append(df)
 
 

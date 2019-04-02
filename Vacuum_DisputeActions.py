@@ -633,6 +633,18 @@ class DisputeActions:
         if not self.df.empty:
             validatecol(self.asql, 'mydisputes', 'Amount_Or_Days')
 
+            self.asql.execute('''
+                update A
+                set
+                    A.Error_Columns = 'Amount_Or_Days',
+                    A.Error_Message = 'DN max day cap is {0} day(s)'
+
+                from mydisputes As A
+
+                where
+                    A.Amount_Or_Days > {0}
+            '''.format(settings['DN_Day_Limit']))
+
         self.asql.execute('''
             insert into {0}
             (
