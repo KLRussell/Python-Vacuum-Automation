@@ -259,8 +259,11 @@ def append_errors(folder_name, df):
 
 
 def get_errors(folder_name):
-    if folder_name in errors:
-        return pd.concat(errors[folder_name], ignore_index=True, sort=False).drop_duplicates().reset_index(drop=True)
+    if folder_name in errors.keys():
+        df = pd.concat(errors[folder_name], ignore_index=True, sort=False).drop_duplicates().reset_index(drop=True)
+        del errors[folder_name]
+
+        return df
     else:
         return pd.DataFrame()
 
