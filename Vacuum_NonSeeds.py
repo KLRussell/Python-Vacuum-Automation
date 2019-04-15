@@ -321,15 +321,17 @@ class NonSeeds:
 
         self.asql = SQLConnect('alch')
         self.asql.connect()
-        self.asql.upload(self.df, 'mydisputes')
+        try:
+            self.asql.upload(self.df, 'mydisputes')
 
-        validatecol(self.asql, 'mydisputes', 'Bill_Date', True, True)
-        validatecol(self.asql, 'mydisputes', 'Billed_Amt')
-        validatecol(self.asql, 'mydisputes', 'Dispute_Amt')
-        validatecol(self.asql, 'mydisputes', 'Approved_Amt')
-        validatecol(self.asql, 'mydisputes', 'Received_Amt')
-        validatecol(self.asql, 'mydisputes', 'Received_Invoice_Date', True)
+            validatecol(self.asql, 'mydisputes', 'Bill_Date', True, True)
+            validatecol(self.asql, 'mydisputes', 'Billed_Amt')
+            validatecol(self.asql, 'mydisputes', 'Dispute_Amt')
+            validatecol(self.asql, 'mydisputes', 'Approved_Amt')
+            validatecol(self.asql, 'mydisputes', 'Received_Amt')
+            validatecol(self.asql, 'mydisputes', 'Received_Invoice_Date', True)
 
-        self.appenddisputes()
-        processresults(self.folder_name, self.asql, 'mydisputes', 'New Non-Seed Disputes')
-        self.asql.close()
+            self.appenddisputes()
+            processresults(self.folder_name, self.asql, 'mydisputes', 'New Non-Seed Disputes')
+        finally:
+            self.asql.close()

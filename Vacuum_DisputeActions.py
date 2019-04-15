@@ -645,82 +645,123 @@ class DisputeActions:
                     A.Amount_Or_Days > {0}
             '''.format(settings['DN_Day_Limit']))
 
+        if self.asql.query("select object_id('DN')").iloc[0, 0]:
+            self.asql.execute("DROP TABLE DN")
+
+        self.asql.execute('''CREATE TABLE DN (DN_ID int, DH_ID int, Norm_Note_Action varchar(500)
+            , Dispute_Note varchar(max), Note_Tag varchar(500), Assign_To varchar(255), Days_Till_Action int
+            , Edit_Date datetime''')
+
         self.asql.execute('''
             insert into {0}
             (
-                DSB_ID,
+                DH_ID,
                 Logged_By,
                 Norm_Note_Action,
                 Dispute_Note,
                 Days_Till_Action,
                 Assign_To,
                 Note_Tag,
-                Attachment
+                Attachment,
+                Edit_Date
             )
+            OUTPUT
+                INSERTED.DN_ID,
+                INSERTED.DH_ID,
+                INSERTED.Norm_Note_Action,
+                INSERTED.Dispute_Note,
+                INSERTED.Note_Tag,
+                INSERTED.Assign_To,
+                INSERTED.Days_Till_Action,
+                INSERTED.Edit_Date
+            
+            INTO DN
+                
             select
-                A.DSB_ID,
+                C.DH_ID,
                 B.Full_Name,
                 A.Action_Norm_Reason,
                 A.Action_Reason,
                 A.Amount_Or_Days,
-                A.Assign_Rep,
+                isnull(A.Assign_Rep, B.Full_Name),
                 A.Note_Tag,
-                A.Attachment
+                A.Attachment,
+                getdate()
 
             from mydisputes As A
             INNER JOIN {1} As B
             ON
                 A.Comp_Serial = B.Comp_Serial
+            INNER JOIN {2} As C
+            ON
+                A.DSB_ID = C.DSB_ID
                 
             where
                 Error_Columns is null
-        '''.format(settings['Dispute_Notes'], settings['CAT_Emp']))
+        '''.format(settings['Dispute_Notes'], settings['CAT_Emp'], settings['Dispute_Current']))
 
         self.asql.execute('''
             UPDATE B
             SET
-                B.Norm_Note_Action = A.Action_Norm_Reason,
-                B.Dispute_Note = A.Action_Reason,
+                B.DN_ID = A.DN_ID
+                B.Norm_Note_Action = A.Norm_Note_Action,
+                B.Dispute_Note = A.Dispute_Note,
                 B.Note_Group_Tag = A.Note_Tag,
-                B.Note_Assigned_To = case when A.Assign_Rep is not null then A.Assign_Rep else C.Full_Name end,
-                B.Days_Till_Note_Review = A.Amount_Or_Days,
-                B.Note_Added_On = getdate()
+                B.Note_Assigned_To = A.Assigned_To,
+                B.Days_Till_Note_Review = A.Days_Till_Action,
+                B.Note_Added_On = A.Edit_Date
 
-            FROM mydisputes As A
+            FROM DN As A
             INNER JOIN {0} As B
             ON
                 A.DSB_ID = B.DSB_ID
-            INNER JOIN {1} As C
-            ON
-                A.Comp_Serial = C.Comp_Serial
             
             where
                 Error_Columns is null
-        '''.format(settings['Dispute_Current'], settings['CAT_Emp']))
+        '''.format(settings['Dispute_Current']))
+
+        self.asql.execute("DROP TABLE DN")
 
     def process(self):
-        if not self.asql:
+        if self.asql:
+            if self.action == 'Escalate':
+                self.escalate()
+            elif self.action == 'Close':
+                self.close()
+            elif self.action == 'Paid':
+                validatecol(self.asql, 'mydisputes', 'Amount_Or_Days')
+                validatecol(self.asql, 'mydisputes', 'Credit_Invoice_Date', True)
+                self.paid()
+            elif self.action == 'Denied':
+                self.denied()
+            elif self.action == 'Approved':
+                self.approved()
+            elif self.action == 'Dispute Note':
+                self.disputenote()
+        else:
             writelog("Processing {0} GRT Dispute Actions".format(len(self.df)), 'info')
 
             self.asql = SQLConnect('alch')
             self.asql.connect()
-            self.asql.upload(self.df, 'mydisputes')
 
-        if self.action == 'Escalate':
-            self.escalate()
-        elif self.action == 'Close':
-            self.close()
-        elif self.action == 'Paid':
-            validatecol(self.asql, 'mydisputes', 'Amount_Or_Days')
-            validatecol(self.asql, 'mydisputes', 'Credit_Invoice_Date', True)
-            self.paid()
-        elif self.action == 'Denied':
-            self.denied()
-        elif self.action == 'Approved':
-            self.approved()
-        elif self.action == 'Dispute Note':
-            self.disputenote()
+            try:
+                self.asql.upload(self.df, 'mydisputes')
 
-        if not self.df.empty:
-            processresults(self.folder_name, self.asql, 'mydisputes', 'New Seed Disputes')
-            self.asql.close()
+                if self.action == 'Escalate':
+                    self.escalate()
+                elif self.action == 'Close':
+                    self.close()
+                elif self.action == 'Paid':
+                    validatecol(self.asql, 'mydisputes', 'Amount_Or_Days')
+                    validatecol(self.asql, 'mydisputes', 'Credit_Invoice_Date', True)
+                    self.paid()
+                elif self.action == 'Denied':
+                    self.denied()
+                elif self.action == 'Approved':
+                    self.approved()
+                elif self.action == 'Dispute Note':
+                    self.disputenote()
+
+                processresults(self.folder_name, self.asql, 'mydisputes', 'New Seed Disputes')
+            finally:
+                self.asql.close()

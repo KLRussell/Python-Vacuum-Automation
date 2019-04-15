@@ -1045,7 +1045,6 @@ class BMIPCI:
                 Assigned_To,
                 Invoice_Date,
                 Comment,
-                Batch,
                 CSR_File_Name
             )
             select
@@ -1063,7 +1062,6 @@ class BMIPCI:
                 end,
                 C.Max_CNR_Date,
                 A.Action_Reason,
-                '{3}' As Batch,
                 A.CSR_File_Name
 
             from mytbl As A
@@ -1551,37 +1549,38 @@ class BMIPCI:
         self.asql = SQLConnect('alch')
         self.asql.connect()
 
-        if self.action == 'Map':
-            self.map('LL', 'ORD_WTN', 'BMI')
-            self.map('LL', 'ORD_WTN', 'PCI')
-            self.map('BRD', 'ORD_BRD_ID', 'BMI')
-            self.map('BRD', 'ORD_BRD_ID', 'PCI')
-            self.map('DED', 'CUS_DED_ID', 'BMI')
-            self.map('DED', 'CUS_DED_ID', 'PCI')
-            self.map('LD', 'ORD_WTN', 'BMI')
-            self.map('LD', 'ORD_WTN', 'PCI')
-            self.map('TF', 'ORD_POTS_ANI_BIL', 'BMI')
-            self.map('TF', 'ORD_POTS_ANI_BIL', 'PCI')
-        elif self.action == 'Dispute':
-            self.dispute('BMI', 'BMI_ID')
-            self.dispute('PCI', 'ID')
-        elif self.action == 'Send to Prov':
-            self.sendtoprov()
-        elif self.action == 'Send to LV':
-            self.sendtolv()
-        elif self.action == 'Dispute Note':
-            self.adddn()
-        elif self.action == 'Escalate Disputes':
-            self.addescalate()
-        elif self.action == 'Paid Disputes':
-            self.addpaid()
-        elif self.action == 'Close Disputes':
-            self.addclosed()
-        elif self.action == 'Send to Audit':
-            self.sendtoaudit()
-        elif self.action == 'Ticket Opened':
-            self.ticketopened()
-        else:
-            self.updateother()
-
-        self.asql.close()
+        try:
+            if self.action == 'Map':
+                self.map('LL', 'ORD_WTN', 'BMI')
+                self.map('LL', 'ORD_WTN', 'PCI')
+                self.map('BRD', 'ORD_BRD_ID', 'BMI')
+                self.map('BRD', 'ORD_BRD_ID', 'PCI')
+                self.map('DED', 'CUS_DED_ID', 'BMI')
+                self.map('DED', 'CUS_DED_ID', 'PCI')
+                self.map('LD', 'ORD_WTN', 'BMI')
+                self.map('LD', 'ORD_WTN', 'PCI')
+                self.map('TF', 'ORD_POTS_ANI_BIL', 'BMI')
+                self.map('TF', 'ORD_POTS_ANI_BIL', 'PCI')
+            elif self.action == 'Dispute':
+                self.dispute('BMI', 'BMI_ID')
+                self.dispute('PCI', 'ID')
+            elif self.action == 'Send to Prov':
+                self.sendtoprov()
+            elif self.action == 'Send to LV':
+                self.sendtolv()
+            elif self.action == 'Dispute Note':
+                self.adddn()
+            elif self.action == 'Escalate Disputes':
+                self.addescalate()
+            elif self.action == 'Paid Disputes':
+                self.addpaid()
+            elif self.action == 'Close Disputes':
+                self.addclosed()
+            elif self.action == 'Send to Audit':
+                self.sendtoaudit()
+            elif self.action == 'Ticket Opened':
+                self.ticketopened()
+            else:
+                self.updateother()
+        finally:
+            self.asql.close()

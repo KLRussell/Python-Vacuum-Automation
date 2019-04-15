@@ -298,173 +298,326 @@ class Seeds:
         '''.format(table, seed, cost_type, params, params2, myseed))
 
     def dispute(self):
-        if not self.asql:
+        if self.asql:
+            for cost_type in settings['Seed-Cost_Type'].split(', '):
+                if 'PC-' in cost_type:
+                    self.grabseedinfo(settings['PaperCost'], 'seed', cost_type, '''
+                        A.Record_Type='{0}',
+                        A.Vendor=B.Vendor,
+                        A.BAN=B.BAN,
+                        A.Bill_Date=B.Bill_Date,
+                        A.State=B.State,
+                        A.Billed_Amt=B.{0},
+                        A.dispute_amt=isnull(A.dispute_amt,B.{0}),
+                        A.USI=CASE
+                            when isnull(A.USI,'') != '' then A.USI
+                            WHEN isnull(B.WTN,'') != '' THEN B.WTN
+                            WHEN isnull(B.Circuit_ID,'') != '' THEN B.Circuit_ID
+                            WHEN isnull(B.BTN,'') != '' THEN B.BTN
+                        END,
+                        A.Source_TBL=isnull(A.Source_TBL, 'PCI'),
+                        A.Source_ID=isnull(A.Source_ID, B.PCI_ID)
+                    '''.format(cost_type.split('-')[1]))
+                elif 'MRC' == cost_type:
+                    self.grabseedinfo(settings[cost_type], 'bdt_{0}_id'.format(cost_type), cost_type, '''
+                        A.Record_Type='{0}',
+                        A.Vendor=B.Vendor,
+                        A.Platform=B.Platform,
+                        A.BAN=B.BAN,
+                        A.Bill_Date=B.Bill_Date,
+                        A.State=B.State,
+                        A.USOC=case
+                            when A.USOC is not null then A.USOC
+                            else B.USOC
+                        end,
+                        A.USOC_Desc=case
+                            when A.USOC_Desc is not null then A.USOC_Desc
+                            else B.USOC_Description
+                        end,
+                        A.Billed_Amt=B.Amount,
+                        A.dispute_amt=isnull(A.dispute_amt,B.Amount),
+                        A.Source_TBL=isnull(A.Source_TBL, 'BMI'),
+                        A.Source_ID=isnull(A.Source_ID, B.BMI_ID),
+                        A.USI=CASE
+                            when isnull(A.USI,'') != '' then A.USI
+                            WHEN isnull(B.WTN,'') != '' THEN B.WTN
+                            WHEN isnull(B.Circuit_ID,'') != '' THEN B.Circuit_ID
+                            WHEN isnull(B.BTN,'') != '' THEN B.BTN
+                        END,
+                        A.CPID = C.CPID,
+                        A.BANMaster_ID = C.BANMasterID
+                        '''.format(cost_type), '''
+                        left join {0} As C
+                        on
+                            B.BDT_MRC_ID = C.BDT_MRC_ID
+                                and
+                            B.Invoice_Date = C.Invoice_Date
+                          '''.format(settings['MRC_CMP']))
+                elif 'OCC' == cost_type:
+                    self.grabseedinfo(settings[cost_type], 'bdt_{0}_id'.format(cost_type), cost_type, '''
+                        A.Record_Type=upper(B.Activity_Type),
+                        A.Vendor=B.Vendor,
+                        A.Platform=B.Platform,
+                        A.BAN=B.BAN,
+                        A.Bill_Date=B.Bill_Date,
+                        A.State=B.State,
+                        A.USOC=case
+                            when A.USOC is not null then A.USOC
+                            else B.USOC
+                        end,
+                        A.USI=case
+                            when isnull(A.USI,'') != '' then A.USI
+                            WHEN isnull(B.BTN,'') != '' THEN B.BTN
+                            WHEN isnull(B.Circuit_ID,'') != '' THEN B.Circuit_ID
+                        END,
+                        A.USOC_Desc=case
+                            when A.USOC_Desc is not null then A.USOC_Desc
+                            else B.USOC_Description
+                        end,
+                        A.Billed_Amt=B.Amount,
+                        A.dispute_amt=isnull(A.dispute_amt, B.Amount),
+                        A.Phrase_Code=case
+                            when A.Phrase_Code is not null then A.Phrase_Code
+                            else B.Phrase_Code
+                        end,
+                        A.Causing_SO=case
+                            when A.Causing_SO is not null then A.Causing_SO
+                            else B.SO
+                        end,
+                        A.PON=case
+                            when A.PON is not null then A.PON
+                            else B.PON
+                        end
+                    ''')
+                elif 'TAS' == cost_type:
+                    self.grabseedinfo(settings[cost_type], 'bdt_{0}_id'.format(cost_type), cost_type, '''
+                        A.Record_Type='{0}',
+                        A.Vendor=B.Vendor,
+                        A.Platform=B.Platform,
+                        A.BAN=B.BAN,
+                        A.Bill_Date=B.Bill_Date,
+                        A.State=B.State,
+                        A.Billed_Amt=B.Total_Amount,
+                        A.dispute_amt=isnull(A.dispute_amt, B.Total_Amount),
+                        A.Jurisdiction=case
+                            when A.Jurisdiction is not null then A.Jurisdiction
+                            else B.Jurisdiction_Phrase
+                        end
+                    '''.format(cost_type))
+                elif 'USAGE' == cost_type:
+                    self.grabseedinfo(settings[cost_type], 'bdt_{0}_id'.format(cost_type), cost_type, '''
+                        A.Record_Type='{0}',
+                        A.Vendor=B.Vendor,
+                        A.Platform=B.Platform,
+                        A.BAN=B.BAN,
+                        A.Bill_Date=B.Bill_Date,
+                        A.State=B.State,
+                        A.Billed_Amt=B.Amount,
+                        A.dispute_amt=isnull(A.dispute_amt,B.Amount),
+                        A.USI=case when isnull(A.USI,'') != '' then A.USI else B.BTN end,
+                        A.Usage_Rate=case
+                            when A.Usage_Rate is not null then A.Usage_Rate
+                            else B.Usage_Rate
+                        end,
+                        A.Jurisdiction=case
+                            when A.Jurisdiction is not null then A.Jurisdiction
+                            else B.Jurisdiction
+                        end
+                    '''.format(cost_type))
+                elif 'LPC' == cost_type:
+                    self.grabseedinfo(settings[cost_type], 'bdt_invoice_id', cost_type, '''
+                        A.Record_Type='{0}',
+                        A.Vendor=B.Vendor,
+                        A.Platform=B.Platform,
+                        A.BAN=B.BAN,
+                        A.Bill_Date=B.Bill_Date,
+                        A.State=B.State,
+                        A.Billed_Amt=B.Late_Payment_Charges,
+                        A.dispute_amt=isnull(A.dispute_amt,B.Late_Payment_Charges)
+                    '''.format(cost_type))
+                elif 'ADJ' == cost_type:
+                    self.grabseedinfo(settings[cost_type], 'bdt_pad_id', cost_type, '''
+                        A.Record_Type='{0}',
+                        A.Vendor=B.Vendor,
+                        A.Platform=B.Platform,
+                        A.BAN=B.BAN,
+                        A.Bill_Date=B.Bill_Date,
+                        A.State=B.State,
+                        A.Billed_Amt=B.Amount,
+                        A.dispute_amt=isnull(A.dispute_amt,B.Amount),
+                        A.Phrase_Code=case
+                            when A.Phrase_Code is not null then A.Phrase_Code
+                            else B.Phrase_Code
+                        end
+                    '''.format(cost_type))
+
+            self.appenddisputes()
+        else:
             writelog("Processing {0} New Seed Disputes".format(len(self.df)), 'info')
 
             self.asql = SQLConnect('alch')
             self.asql.connect()
-            self.asql.upload(self.df, 'myseeds')
+            try:
+                self.asql.upload(self.df, 'myseeds')
 
-            validatecol(self.asql, 'myseeds', 'Dispute_Amt')
-            validatecol(self.asql, 'myseeds', 'Approved_Amt')
-            validatecol(self.asql, 'myseeds', 'Received_Amt')
-            validatecol(self.asql, 'myseeds', 'Received_Invoice_Date', True)
+                validatecol(self.asql, 'myseeds', 'Dispute_Amt')
+                validatecol(self.asql, 'myseeds', 'Approved_Amt')
+                validatecol(self.asql, 'myseeds', 'Received_Amt')
+                validatecol(self.asql, 'myseeds', 'Received_Invoice_Date', True)
 
-        for cost_type in settings['Seed-Cost_Type'].split(', '):
-            if 'PC-' in cost_type:
-                self.grabseedinfo(settings['PaperCost'], 'seed', cost_type, '''
-                    A.Record_Type='{0}',
-                    A.Vendor=B.Vendor,
-                    A.BAN=B.BAN,
-                    A.Bill_Date=B.Bill_Date,
-                    A.State=B.State,
-                    A.Billed_Amt=B.{0},
-                    A.dispute_amt=isnull(A.dispute_amt,B.{0}),
-                    A.USI=CASE
-                        when isnull(A.USI,'') != '' then A.USI
-                        WHEN isnull(B.WTN,'') != '' THEN B.WTN
-                        WHEN isnull(B.Circuit_ID,'') != '' THEN B.Circuit_ID
-                        WHEN isnull(B.BTN,'') != '' THEN B.BTN
-                    END,
-                    A.Source_TBL=isnull(A.Source_TBL, 'PCI'),
-                    A.Source_ID=isnull(A.Source_ID, B.PCI_ID)
-                '''.format(cost_type.split('-')[1]))
-            elif 'MRC' == cost_type:
-                self.grabseedinfo(settings[cost_type], 'bdt_{0}_id'.format(cost_type), cost_type, '''
-                    A.Record_Type='{0}',
-                    A.Vendor=B.Vendor,
-                    A.Platform=B.Platform,
-                    A.BAN=B.BAN,
-                    A.Bill_Date=B.Bill_Date,
-                    A.State=B.State,
-                    A.USOC=case
-                        when A.USOC is not null then A.USOC
-                        else B.USOC
-                    end,
-                    A.USOC_Desc=case
-                        when A.USOC_Desc is not null then A.USOC_Desc
-                        else B.USOC_Description
-                    end,
-                    A.Billed_Amt=B.Amount,
-                    A.dispute_amt=isnull(A.dispute_amt,B.Amount),
-                    A.Source_TBL=isnull(A.Source_TBL, 'BMI'),
-                    A.Source_ID=isnull(A.Source_ID, B.BMI_ID),
-                    A.USI=CASE
-                        when isnull(A.USI,'') != '' then A.USI
-                        WHEN isnull(B.WTN,'') != '' THEN B.WTN
-                        WHEN isnull(B.Circuit_ID,'') != '' THEN B.Circuit_ID
-                        WHEN isnull(B.BTN,'') != '' THEN B.BTN
-                    END,
-                    A.CPID = C.CPID,
-                    A.BANMaster_ID = C.BANMasterID
-                    '''.format(cost_type), '''
-                    left join {0} As C
-                    on
-                        B.BDT_MRC_ID = C.BDT_MRC_ID
-                            and
-                        B.Invoice_Date = C.Invoice_Date
-                      '''.format(settings['MRC_CMP']))
-            elif 'OCC' == cost_type:
-                self.grabseedinfo(settings[cost_type], 'bdt_{0}_id'.format(cost_type), cost_type, '''
-                    A.Record_Type=upper(B.Activity_Type),
-                    A.Vendor=B.Vendor,
-                    A.Platform=B.Platform,
-                    A.BAN=B.BAN,
-                    A.Bill_Date=B.Bill_Date,
-                    A.State=B.State,
-                    A.USOC=case
-                        when A.USOC is not null then A.USOC
-                        else B.USOC
-                    end,
-                    A.USI=case
-                        when isnull(A.USI,'') != '' then A.USI
-                        WHEN isnull(B.BTN,'') != '' THEN B.BTN
-                        WHEN isnull(B.Circuit_ID,'') != '' THEN B.Circuit_ID
-                    END,
-                    A.USOC_Desc=case
-                        when A.USOC_Desc is not null then A.USOC_Desc
-                        else B.USOC_Description
-                    end,
-                    A.Billed_Amt=B.Amount,
-                    A.dispute_amt=isnull(A.dispute_amt, B.Amount),
-                    A.Phrase_Code=case
-                        when A.Phrase_Code is not null then A.Phrase_Code
-                        else B.Phrase_Code
-                    end,
-                    A.Causing_SO=case
-                        when A.Causing_SO is not null then A.Causing_SO
-                        else B.SO
-                    end,
-                    A.PON=case
-                        when A.PON is not null then A.PON
-                        else B.PON
-                    end
-                ''')
-            elif 'TAS' == cost_type:
-                self.grabseedinfo(settings[cost_type], 'bdt_{0}_id'.format(cost_type), cost_type, '''
-                    A.Record_Type='{0}',
-                    A.Vendor=B.Vendor,
-                    A.Platform=B.Platform,
-                    A.BAN=B.BAN,
-                    A.Bill_Date=B.Bill_Date,
-                    A.State=B.State,
-                    A.Billed_Amt=B.Total_Amount,
-                    A.dispute_amt=isnull(A.dispute_amt, B.Total_Amount),
-                    A.Jurisdiction=case
-                        when A.Jurisdiction is not null then A.Jurisdiction
-                        else B.Jurisdiction_Phrase
-                    end
-                '''.format(cost_type))
-            elif 'USAGE' == cost_type:
-                self.grabseedinfo(settings[cost_type], 'bdt_{0}_id'.format(cost_type), cost_type, '''
-                    A.Record_Type='{0}',
-                    A.Vendor=B.Vendor,
-                    A.Platform=B.Platform,
-                    A.BAN=B.BAN,
-                    A.Bill_Date=B.Bill_Date,
-                    A.State=B.State,
-                    A.Billed_Amt=B.Amount,
-                    A.dispute_amt=isnull(A.dispute_amt,B.Amount),
-                    A.USI=case when isnull(A.USI,'') != '' then A.USI else B.BTN end,
-                    A.Usage_Rate=case
-                        when A.Usage_Rate is not null then A.Usage_Rate
-                        else B.Usage_Rate
-                    end,
-                    A.Jurisdiction=case
-                        when A.Jurisdiction is not null then A.Jurisdiction
-                        else B.Jurisdiction
-                    end
-                '''.format(cost_type))
-            elif 'LPC' == cost_type:
-                self.grabseedinfo(settings[cost_type], 'bdt_invoice_id', cost_type, '''
-                    A.Record_Type='{0}',
-                    A.Vendor=B.Vendor,
-                    A.Platform=B.Platform,
-                    A.BAN=B.BAN,
-                    A.Bill_Date=B.Bill_Date,
-                    A.State=B.State,
-                    A.Billed_Amt=B.Late_Payment_Charges,
-                    A.dispute_amt=isnull(A.dispute_amt,B.Late_Payment_Charges)
-                '''.format(cost_type))
-            elif 'ADJ' == cost_type:
-                self.grabseedinfo(settings[cost_type], 'bdt_pad_id', cost_type, '''
-                    A.Record_Type='{0}',
-                    A.Vendor=B.Vendor,
-                    A.Platform=B.Platform,
-                    A.BAN=B.BAN,
-                    A.Bill_Date=B.Bill_Date,
-                    A.State=B.State,
-                    A.Billed_Amt=B.Amount,
-                    A.dispute_amt=isnull(A.dispute_amt,B.Amount),
-                    A.Phrase_Code=case
-                        when A.Phrase_Code is not null then A.Phrase_Code
-                        else B.Phrase_Code
-                    end
-                '''.format(cost_type))
+                for cost_type in settings['Seed-Cost_Type'].split(', '):
+                    if 'PC-' in cost_type:
+                        self.grabseedinfo(settings['PaperCost'], 'seed', cost_type, '''
+                            A.Record_Type='{0}',
+                            A.Vendor=B.Vendor,
+                            A.BAN=B.BAN,
+                            A.Bill_Date=B.Bill_Date,
+                            A.State=B.State,
+                            A.Billed_Amt=B.{0},
+                            A.dispute_amt=isnull(A.dispute_amt,B.{0}),
+                            A.USI=CASE
+                                when isnull(A.USI,'') != '' then A.USI
+                                WHEN isnull(B.WTN,'') != '' THEN B.WTN
+                                WHEN isnull(B.Circuit_ID,'') != '' THEN B.Circuit_ID
+                                WHEN isnull(B.BTN,'') != '' THEN B.BTN
+                            END,
+                            A.Source_TBL=isnull(A.Source_TBL, 'PCI'),
+                            A.Source_ID=isnull(A.Source_ID, B.PCI_ID)
+                        '''.format(cost_type.split('-')[1]))
+                    elif 'MRC' == cost_type:
+                        self.grabseedinfo(settings[cost_type], 'bdt_{0}_id'.format(cost_type), cost_type, '''
+                            A.Record_Type='{0}',
+                            A.Vendor=B.Vendor,
+                            A.Platform=B.Platform,
+                            A.BAN=B.BAN,
+                            A.Bill_Date=B.Bill_Date,
+                            A.State=B.State,
+                            A.USOC=case
+                                when A.USOC is not null then A.USOC
+                                else B.USOC
+                            end,
+                            A.USOC_Desc=case
+                                when A.USOC_Desc is not null then A.USOC_Desc
+                                else B.USOC_Description
+                            end,
+                            A.Billed_Amt=B.Amount,
+                            A.dispute_amt=isnull(A.dispute_amt,B.Amount),
+                            A.Source_TBL=isnull(A.Source_TBL, 'BMI'),
+                            A.Source_ID=isnull(A.Source_ID, B.BMI_ID),
+                            A.USI=CASE
+                                when isnull(A.USI,'') != '' then A.USI
+                                WHEN isnull(B.WTN,'') != '' THEN B.WTN
+                                WHEN isnull(B.Circuit_ID,'') != '' THEN B.Circuit_ID
+                                WHEN isnull(B.BTN,'') != '' THEN B.BTN
+                            END,
+                            A.CPID = C.CPID,
+                            A.BANMaster_ID = C.BANMasterID
+                            '''.format(cost_type), '''
+                            left join {0} As C
+                            on
+                                B.BDT_MRC_ID = C.BDT_MRC_ID
+                                    and
+                                B.Invoice_Date = C.Invoice_Date
+                              '''.format(settings['MRC_CMP']))
+                    elif 'OCC' == cost_type:
+                        self.grabseedinfo(settings[cost_type], 'bdt_{0}_id'.format(cost_type), cost_type, '''
+                            A.Record_Type=upper(B.Activity_Type),
+                            A.Vendor=B.Vendor,
+                            A.Platform=B.Platform,
+                            A.BAN=B.BAN,
+                            A.Bill_Date=B.Bill_Date,
+                            A.State=B.State,
+                            A.USOC=case
+                                when A.USOC is not null then A.USOC
+                                else B.USOC
+                            end,
+                            A.USI=case
+                                when isnull(A.USI,'') != '' then A.USI
+                                WHEN isnull(B.BTN,'') != '' THEN B.BTN
+                                WHEN isnull(B.Circuit_ID,'') != '' THEN B.Circuit_ID
+                            END,
+                            A.USOC_Desc=case
+                                when A.USOC_Desc is not null then A.USOC_Desc
+                                else B.USOC_Description
+                            end,
+                            A.Billed_Amt=B.Amount,
+                            A.dispute_amt=isnull(A.dispute_amt, B.Amount),
+                            A.Phrase_Code=case
+                                when A.Phrase_Code is not null then A.Phrase_Code
+                                else B.Phrase_Code
+                            end,
+                            A.Causing_SO=case
+                                when A.Causing_SO is not null then A.Causing_SO
+                                else B.SO
+                            end,
+                            A.PON=case
+                                when A.PON is not null then A.PON
+                                else B.PON
+                            end
+                        ''')
+                    elif 'TAS' == cost_type:
+                        self.grabseedinfo(settings[cost_type], 'bdt_{0}_id'.format(cost_type), cost_type, '''
+                            A.Record_Type='{0}',
+                            A.Vendor=B.Vendor,
+                            A.Platform=B.Platform,
+                            A.BAN=B.BAN,
+                            A.Bill_Date=B.Bill_Date,
+                            A.State=B.State,
+                            A.Billed_Amt=B.Total_Amount,
+                            A.dispute_amt=isnull(A.dispute_amt, B.Total_Amount),
+                            A.Jurisdiction=case
+                                when A.Jurisdiction is not null then A.Jurisdiction
+                                else B.Jurisdiction_Phrase
+                            end
+                        '''.format(cost_type))
+                    elif 'USAGE' == cost_type:
+                        self.grabseedinfo(settings[cost_type], 'bdt_{0}_id'.format(cost_type), cost_type, '''
+                            A.Record_Type='{0}',
+                            A.Vendor=B.Vendor,
+                            A.Platform=B.Platform,
+                            A.BAN=B.BAN,
+                            A.Bill_Date=B.Bill_Date,
+                            A.State=B.State,
+                            A.Billed_Amt=B.Amount,
+                            A.dispute_amt=isnull(A.dispute_amt,B.Amount),
+                            A.USI=case when isnull(A.USI,'') != '' then A.USI else B.BTN end,
+                            A.Usage_Rate=case
+                                when A.Usage_Rate is not null then A.Usage_Rate
+                                else B.Usage_Rate
+                            end,
+                            A.Jurisdiction=case
+                                when A.Jurisdiction is not null then A.Jurisdiction
+                                else B.Jurisdiction
+                            end
+                        '''.format(cost_type))
+                    elif 'LPC' == cost_type:
+                        self.grabseedinfo(settings[cost_type], 'bdt_invoice_id', cost_type, '''
+                            A.Record_Type='{0}',
+                            A.Vendor=B.Vendor,
+                            A.Platform=B.Platform,
+                            A.BAN=B.BAN,
+                            A.Bill_Date=B.Bill_Date,
+                            A.State=B.State,
+                            A.Billed_Amt=B.Late_Payment_Charges,
+                            A.dispute_amt=isnull(A.dispute_amt,B.Late_Payment_Charges)
+                        '''.format(cost_type))
+                    elif 'ADJ' == cost_type:
+                        self.grabseedinfo(settings[cost_type], 'bdt_pad_id', cost_type, '''
+                            A.Record_Type='{0}',
+                            A.Vendor=B.Vendor,
+                            A.Platform=B.Platform,
+                            A.BAN=B.BAN,
+                            A.Bill_Date=B.Bill_Date,
+                            A.State=B.State,
+                            A.Billed_Amt=B.Amount,
+                            A.dispute_amt=isnull(A.dispute_amt,B.Amount),
+                            A.Phrase_Code=case
+                                when A.Phrase_Code is not null then A.Phrase_Code
+                                else B.Phrase_Code
+                            end
+                        '''.format(cost_type))
 
-        self.appenddisputes()
-
-        if not self.df.empty:
-            processresults(self.folder_name, self.asql, 'myseeds', 'New Seed Disputes')
-            self.asql.close()
-
+                self.appenddisputes()
+                processresults(self.folder_name, self.asql, 'myseeds', 'New Seed Disputes')
+            finally:
+                self.asql.close()
